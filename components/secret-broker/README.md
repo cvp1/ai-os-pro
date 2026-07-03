@@ -35,10 +35,17 @@ at `~/.claude/skills/secret/SKILL.md`, adds the secrets convention to your AI-OS
 session afterward** so `/secret` registers. Override locations with `AIOS_HOME` /
 `CLAUDE_SKILLS_DIR`.
 
-Requires an OS keyring: macOS Keychain (built in) or, on Linux, the Secret Service
-(`gnome-keyring` + `libsecret-tools`, i.e. the `secret-tool` command). Windows
-Credential Manager support is a fast follow. A headless encrypted-file fallback is
-planned but **not** in this build — the installer warns you if no keyring is found.
+**Preferred store: an OS keyring** — macOS Keychain (built in) or, on Linux, the
+Secret Service (`gnome-keyring` + `libsecret-tools`, i.e. the `secret-tool`
+command). Windows Credential Manager support is a fast follow.
+
+**Headless fallback (no keyring):** set `AIOS_SECRET_STORE_DIR` to an **encrypted**
+directory and the broker stores secrets as `0600` files there. If a `~/.key` vault
+exists (e.g. an **fscrypt**-encrypted vault), it's used automatically at
+`~/.key/aios/`. **At-rest protection is that directory's** (fscrypt / LUKS / etc.)
+— the broker does not add its own encryption, and it says so on every file-mode
+`set`. Without a keyring *and* without an encrypted store dir, the broker refuses
+to store and tells you why.
 
 ## Store a credential (two ways, both keep it off the transcript)
 

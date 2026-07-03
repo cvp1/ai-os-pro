@@ -55,17 +55,21 @@ first from [cvp1/ai-os](https://github.com/cvp1/ai-os).)
 ```sh
 git clone https://github.com/cvp1/ai-os-pro
 cd ai-os-pro
-./install.sh                 # install all components (currently: secret-broker)
-# …or one at a time:
-./install.sh secret-broker
+./install.sh                        # install default components (secret-broker)
+# …or by name:
+./install.sh secret-broker model-keys
 ```
 
-Installing the **secret-broker** component:
+**Components:**
 
-- installs the broker to `~/ai-os/bin/secret`
-- registers the `/secret` skill at `~/.claude/skills/secret/SKILL.md`
-- adds the secrets convention to your AI-OS `CLAUDE.md` if it finds one
-- checks for an OS keyring and warns if none is present
+- **`secret-broker`** — the credential capability. Installs the broker to
+  `~/ai-os/bin/secret`, registers the `/secret` skill, adds the secrets
+  convention to your AI-OS `CLAUDE.md` if it finds one, and checks for a store.
+  Uses your **OS keyring** (macOS Keychain / Linux Secret Service); with no
+  keyring it falls back to `0600` files in an encrypted dir (`AIOS_SECRET_STORE_DIR`,
+  or an fscrypt `~/.key/aios` if present).
+- **`model-keys`** — an example: the `/ask-model` skill calls OpenRouter / Gemini /
+  DeepSeek using keys held by the broker, so a provider key never enters the chat.
 
 Then **start a fresh Claude Code session** so `/secret` registers, and store your
 first credential:

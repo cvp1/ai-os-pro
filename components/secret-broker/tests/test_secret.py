@@ -45,6 +45,9 @@ mod.AIOS_DIR = os.path.join(TMP, "ai-os")
 mod.AUDIT_PATH = os.path.join(mod.AIOS_DIR, ".secrets-audit.jsonl")
 mod.INDEX_PATH = os.path.join(mod.AIOS_DIR, ".secret-handles")
 
+# --- keep real keyring fns for the file-backend test, then stub for the rest --
+_REAL_KR = (mod._kr_store, mod._kr_get, mod._kr_delete)
+
 # --- stub the keyring layer (in-memory) --------------------------------------
 STORE = {}
 mod._kr_store = lambda name, value: STORE.__setitem__(name, value)
@@ -199,6 +202,27 @@ rc, _, _ = record(*run(["revoke", "secret://../etc/passwd"]))
 check(rc != 0, "malformed handle names are rejected")
 rc, _, _ = record(*run(["revoke", "plain-name-no-scheme"]))
 check(rc != 0, "a non-secret:// argument is rejected")
+
+# --- 10. FILE backend (headless fallback, e.g. an fscrypt ~/.key vault) -------
+mod._kr_store, mod._kr_get, mod._kr_delete = _REAL_KR   # un-stub: exercise real file ops
+_orig_which = mod._which
+mod._which = lambda exe: None                            # force "no native keyring"
+_fstore = os.path.join(TMP, "filestore")
+os.environ["AIOS_SECRET_STORE_DIR"] = _fstore
+FVAL = "FILEVAL-abc-123"
+check(mod._backend() == "file", "file backend engages with a store dir and no keyring")
+rc, sout, serr = run(["set", "secret://f-key"], stdin_text=FVAL + "\n")
+_fp = os.path.join(_fstore, "f-key")
+check(rc == 0 and os.path.exists(_fp), "file backend stores the secret to a file")
+check((os.stat(_fp).st_mode & 0o777) == 0o600, "file backend uses 0600 permissions")
+check(FVAL not in sout and FVAL not in serr, "file backend set never prints the value")
+check(mod._kr_get("f-key") == FVAL, "file backend reads the value back")
+_, lout, _ = run(["list"])
+check("secret://f-key" in lout, "file backend list enumerates the store dir")
+rc, _, _ = run(["revoke", "secret://f-key"])
+check(rc == 0 and not os.path.exists(_fp), "file backend revoke deletes the file")
+del os.environ["AIOS_SECRET_STORE_DIR"]
+mod._which = _orig_which
 
 print()
 if FAILURES:
