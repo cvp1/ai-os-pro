@@ -1,0 +1,5 @@
+SECRETS CONVENTION: any credential a skill needs (app password, API key, send token)
+NEVER goes in a file, a skill body, memory, or this conversation. It goes in the OS
+keyring under a handle (secret://<name>) and is used ONLY by asking ~/ai-os/bin/secret
+to act with it. Skills reference the handle, never the value. There is no verb that
+returns a secret's value — the helper acts and returns outcomes. Do not invent one.
