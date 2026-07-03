@@ -45,6 +45,40 @@ true shape of the protection than oversell it.
 
 More native components will follow (sync, local indexing, and beyond).
 
+## Install
+
+AI-OS Pro is a set of **opt-in native components you add on top of a Core AI-OS
+install.** It does **not** replace or convert Core — it drops components into the
+same `~/ai-os/` tree and registers their skills. (No Core install yet? Set one up
+first from [cvp1/ai-os](https://github.com/cvp1/ai-os).)
+
+```sh
+git clone https://github.com/cvp1/ai-os-pro
+cd ai-os-pro
+./install.sh                 # install all components (currently: secret-broker)
+# …or one at a time:
+./install.sh secret-broker
+```
+
+Installing the **secret-broker** component:
+
+- installs the broker to `~/ai-os/bin/secret`
+- registers the `/secret` skill at `~/.claude/skills/secret/SKILL.md`
+- adds the secrets convention to your AI-OS `CLAUDE.md` if it finds one
+- checks for an OS keyring and warns if none is present
+
+Then **start a fresh Claude Code session** so `/secret` registers, and store your
+first credential:
+
+```sh
+~/ai-os/bin/secret set secret://gmail-app-password    # prompts you, no echo
+# …or add it in your OS keyring app under service "ai-os", account "gmail-app-password"
+```
+
+Override locations with `AIOS_HOME` (default `~/ai-os`) and `CLAUDE_SKILLS_DIR`
+(default `~/.claude/skills`). To uninstall a component, delete `~/ai-os/bin/secret`
+and `~/.claude/skills/secret/`.
+
 ## Status
 
 **Early — staking the ground.** The edition is defined and the secrets broker is

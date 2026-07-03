@@ -26,8 +26,14 @@ keyring to *act* on your behalf and hands back **only the result**.
 ## Install
 
 ```sh
-./install.sh          # copies the broker to ~/ai-os/bin/secret
+./install.sh
 ```
+
+This installs the broker to `~/ai-os/bin/secret`, **registers the `/secret` skill**
+at `~/.claude/skills/secret/SKILL.md`, adds the secrets convention to your AI-OS
+`CLAUDE.md` if it finds one, and checks for a keyring. **Start a fresh Claude Code
+session afterward** so `/secret` registers. Override locations with `AIOS_HOME` /
+`CLAUDE_SKILLS_DIR`.
 
 Requires an OS keyring: macOS Keychain (built in) or, on Linux, the Secret Service
 (`gnome-keyring` + `libsecret-tools`, i.e. the `secret-tool` command). Windows
@@ -79,6 +85,7 @@ live-validated on a machine with a real keyring.
 ## Files
 
 - `secret` — the broker (Python 3 stdlib, zero pip dependencies)
-- `skill/secret.md` — the `/secret` skill fragment for your AI-OS build
+- `install.sh` — installs the broker + registers the skill + convention
+- `skill/SKILL.md` — the `/secret` skill, registered into `~/.claude/skills/secret/`
 - `convention.txt` — the agent-facing secrets convention line
 - `tests/test_secret.py` — validation suite
