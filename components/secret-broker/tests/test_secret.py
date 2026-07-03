@@ -222,6 +222,22 @@ check("secret://f-key" in lout, "file backend list enumerates the store dir")
 rc, _, _ = run(["revoke", "secret://f-key"])
 check(rc == 0 and not os.path.exists(_fp), "file backend revoke deletes the file")
 del os.environ["AIOS_SECRET_STORE_DIR"]
+
+# --- 11. locked-vault detection (canary override, no fscrypt needed) ----------
+os.environ["AIOS_SECRET_STORE_DIR"] = _fstore
+_canary = os.path.join(TMP, "canary-.vault_unlocked")   # absent => locked
+os.environ["AIOS_SECRET_VAULT_CANARY"] = _canary
+os.environ["AIOS_SECRET_UNLOCK_HINT"] = "run unlock.sh"
+rc, out, err = run(["list"])
+check(rc != 0 and "locked" in err.lower(), "list reports a LOCKED vault, not empty")
+rc, out, err = run(["set", "secret://z-key"], stdin_text="v\n")
+check(rc != 0 and "locked" in err.lower(), "set refuses on a locked vault")
+check("run unlock.sh" in err, "the unlock hint is shown")
+open(_canary, "w").close()                              # 'unlock' — canary appears
+rc, out, err = run(["list"])
+check(rc == 0, "access resumes once the vault is unlocked (canary present)")
+for k in ("AIOS_SECRET_STORE_DIR", "AIOS_SECRET_VAULT_CANARY", "AIOS_SECRET_UNLOCK_HINT"):
+    os.environ.pop(k, None)
 mod._which = _orig_which
 
 print()

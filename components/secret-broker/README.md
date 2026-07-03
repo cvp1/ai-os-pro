@@ -47,6 +47,15 @@ exists (e.g. an **fscrypt**-encrypted vault), it's used automatically at
 `set`. Without a keyring *and* without an encrypted store dir, the broker refuses
 to store and tells you why.
 
+**Locked-vault awareness.** An fscrypt-style vault is *locked* until you unlock it
+(e.g. after a reboot). The broker detects this via a `.vault_unlocked` canary at
+the vault root (`~/.key/.vault_unlocked` for `~/.key/aios`, or point
+`AIOS_SECRET_VAULT_CANARY` at your own) and fails with a clean
+`🔒 secret store is locked` instead of a misleading "not found". Set
+`AIOS_SECRET_UNLOCK_HINT` to your unlock command to have it shown in the message.
+Auto-detection applies only to the `~/.key/aios` convention; an explicit
+`AIOS_SECRET_STORE_DIR` opts out unless it also sets a canary.
+
 ## Store a credential (two ways, both keep it off the transcript)
 
 1. **OS keyring app (recommended):** add an entry under service `ai-os`, account
