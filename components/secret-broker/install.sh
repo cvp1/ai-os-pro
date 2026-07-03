@@ -41,9 +41,12 @@ fi
 # 4. keyring check ---------------------------------------------------------------
 if command -v security >/dev/null 2>&1 || command -v secret-tool >/dev/null 2>&1; then
   echo "✓ OS keyring detected — ready to store credentials."
+elif [ -n "${AIOS_SECRET_STORE_DIR:-}" ] || [ -d "$HOME/.key" ]; then
+  echo "✓ no OS keyring — using encrypted file store at ${AIOS_SECRET_STORE_DIR:-$HOME/.key/aios}"
+  echo "  (at-rest protection is that directory's, e.g. fscrypt/LUKS — not the broker's)."
 else
-  echo "! no OS keyring found (need macOS Keychain, or Linux gnome-keyring +"
-  echo "  libsecret-tools for 'secret-tool'). Install one before storing a secret."
+  echo "! no OS keyring and no encrypted store dir. Set AIOS_SECRET_STORE_DIR to an"
+  echo "  encrypted dir (or install a keyring) before storing a secret."
 fi
 
 cat <<EOF
