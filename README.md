@@ -28,8 +28,9 @@ ask for one.
 The first — and the reason this edition exists — is a **local secrets broker**:
 
 - You register a credential once (an API key, an app password, a token), stored
-  in your OS keyring (macOS Keychain, Linux Secret Service, Windows Credential
-  Manager).
+  in your OS keyring — macOS Keychain or Linux Secret Service today (Windows
+  Credential Manager is planned, not yet built; the installer itself is
+  bash-only, so Windows means WSL for now).
 - Your skills reference it only by a stable **handle** — `secret://gmail-app-password` —
   never the value.
 - A thin local broker holds the secret, performs the authenticated action on your
@@ -85,8 +86,12 @@ and `~/.claude/skills/secret/`.
 
 ## Status
 
-**Early — staking the ground.** The edition is defined and the secrets broker is
-specced; the first component is in development. Watch this space.
+**Early, but real.** Two components ship today: the secrets broker (built,
+self-tested — 29 checks — and validated live with real provider keys on macOS
+Keychain and the file/fscrypt fallback) and `model-keys` (`/ask-model` through
+broker-held keys). Unproven so far: the Linux Secret-Service *daemon* path on a
+headless box, and Windows entirely. Claims track reality here — if it isn't
+listed as validated, treat it as not yet.
 
 ## Principles (unchanged from Core)
 
