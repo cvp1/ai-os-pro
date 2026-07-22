@@ -28,9 +28,11 @@ echo '{"model":"MODEL_SLUG","messages":[{"role":"user","content":"PROMPT"}]}' > 
 # response: .choices[0].message.content
 ```
 
-**DeepSeek** (handle `secret://deepseek`, `Authorization: Bearer`, OpenAI-shaped):
+**DeepSeek** (handle `secret://deepseek`, `Authorization: Bearer`, OpenAI-shaped —
+`deepseek-chat`/`deepseek-reasoner` were retired 2026-07-24; v4-flash is a hybrid
+thinker, so disable thinking or it may burn the whole token budget on CoT):
 ```sh
-echo '{"model":"deepseek-chat","messages":[{"role":"user","content":"PROMPT"}]}' > /tmp/req.json
+echo '{"model":"deepseek-v4-flash","thinking":{"type":"disabled"},"messages":[{"role":"user","content":"PROMPT"}]}' > /tmp/req.json
 ~/ai-os/bin/secret fetch secret://deepseek \
   --url https://api.deepseek.com/chat/completions \
   --inject bearer --method POST --data-file /tmp/req.json
