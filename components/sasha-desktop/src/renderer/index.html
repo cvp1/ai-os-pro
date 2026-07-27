@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      Nothing remote loads. 'self' only, no inline script, no inline style, no
+      framing, no form posts, no base-uri games. audit:surface requires this tag
+      and requires default-src to stay 'self'.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    />
+    <title>Sasha</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="wordmark">
+        <h1>Sasha</h1>
+        <!-- D53: Sasha never ships bare. The function tagline rides every surface. -->
+        <p class="tagline">a personal AI that is yours — it works while you are away, and tells you when it did</p>
+      </div>
+      <div class="masthead-actions">
+        <button id="refresh" type="button" class="ghost">Check now</button>
+      </div>
+    </header>
+
+    <section id="status-strip" class="status-strip" hidden>
+      <p id="status-text"></p>
+      <p id="status-detail" class="muted"></p>
+    </section>
+
+    <main>
+      <section id="bell" class="bell"></section>
+
+      <section class="doctor">
+        <div class="doctor-head">
+          <h2>System check</h2>
+          <button id="run-doctor" type="button" class="ghost">Run /doctor</button>
+        </div>
+        <p class="muted small">
+          Runs the same <code>/doctor</code> your terminal runs, in your own Claude Code, and
+          shows exactly what it said.
+        </p>
+        <pre id="doctor-output" class="doctor-output" hidden></pre>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p id="footer-settings" class="muted small"></p>
+      <p class="muted small">
+        Local only. No account, no gateway, no telemetry — the only thing that leaves this
+        machine is your own Claude Code talking to your own provider.
+      </p>
+    </footer>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

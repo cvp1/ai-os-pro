@@ -1,0 +1,56 @@
+name: sasha-desktop
+
+# Platform-agnostic is a claim, so it is enforced by the pipeline rather than by
+# intention: every push builds and tests on Linux AND macOS. A change that breaks
+# either one fails the day it is written, not at packaging time.
+
+on:
+  push:
+    paths:
+      - 'components/sasha-desktop/**'
+      - '.github/workflows/sasha-desktop.yml'
+  pull_request:
+    paths:
+      - 'components/sasha-desktop/**'
+      - '.github/workflows/sasha-desktop.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: components/sasha-desktop
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: npm ci --no-fund
+
+      - name: Build
+        run: npm run build
+
+      # deps posture + known CVEs + security surface + types + behaviour.
+      - name: Verify
+        run: npm run verify
+
+      # The runtime zero-telemetry probe needs a display. On Linux we give it one;
+      # on macOS the GitHub runner already has a window server.
+      - name: Zero-telemetry probe (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node --test tests/no-network.test.mjs
+
+      - name: Zero-telemetry probe (macOS)
+        if: runner.os == 'macOS'
+        run: node --test tests/no-network.test.mjs

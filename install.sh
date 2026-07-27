@@ -13,6 +13,7 @@ for c in "${components[@]}"; do
   script="$HERE/components/$c/install.sh"
   if [ ! -x "$script" ]; then
     echo "unknown component: $c" >&2
+    echo "available: secret-broker, model-keys, sasha-desktop" >&2
     exit 1
   fi
   echo "=== $c ==="

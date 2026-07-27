@@ -1,0 +1,43 @@
+import { contextBridge, ipcRenderer } from 'electron'
+
+/**
+ * The bridge — the complete list of things the page is allowed to do.
+ *
+ * Everything the renderer can reach is on this object. There is no generic
+ * "invoke any channel" escape hatch, because that would make this list decorative:
+ * each method names one main-process handler and passes only primitives.
+ *
+ * Note what is absent: no filesystem, no child process, no network, no secret
+ * access. The renderer displays what main hands it and asks main to act.
+ */
+const api = {
+  getInstall: () => ipcRenderer.invoke('desk:get-install'),
+  getHarness: () => ipcRenderer.invoke('desk:get-harness'),
+  getItems: () => ipcRenderer.invoke('desk:get-items'),
+  getSettings: () => ipcRenderer.invoke('desk:get-settings'),
+  setSettings: (settings: unknown) => ipcRenderer.invoke('desk:set-settings', settings),
+
+  readItem: (id: string) => ipcRenderer.invoke('desk:read-item', id),
+  openItem: (id: string) => ipcRenderer.invoke('desk:open-item', id),
+  accept: (id: string) => ipcRenderer.invoke('desk:accept', id),
+  dismiss: (id: string) => ipcRenderer.invoke('desk:dismiss', id),
+
+  refresh: () => ipcRenderer.invoke('desk:refresh'),
+  runDoctor: () => ipcRenderer.invoke('desk:run-doctor'),
+
+  /** Main pushes a fresh item list after every scan. */
+  onItems: (callback: (items: unknown) => void) => {
+    ipcRenderer.on('desk:items', (_event, items) => callback(items))
+  },
+  onSettings: (callback: (settings: unknown) => void) => {
+    ipcRenderer.on('desk:settings', (_event, settings) => callback(settings))
+  },
+  /** Clicking a notification asks the window to scroll to that card. */
+  onFocusItem: (callback: (id: string) => void) => {
+    ipcRenderer.on('desk:focus-item', (_event, id) => callback(String(id)))
+  },
+}
+
+contextBridge.exposeInMainWorld('sasha', api)
+
+export type SashaApi = typeof api

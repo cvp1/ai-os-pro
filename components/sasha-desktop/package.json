@@ -1,0 +1,27 @@
+{
+  "name": "sasha-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sasha Desktop — the window your AI-OS opens when it has something for you. Local-only, zero runtime dependencies.",
+  "license": "Apache-2.0",
+  "main": "out/main/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
+    "dev": "npm run build && electron .",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "audit:surface": "node scripts/audit-surface.mjs",
+    "audit:deps": "node scripts/audit-deps.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "verify": "npm run audit:deps && npm run audit:cve && npm run audit:surface && npm run typecheck && npm run test",
+    "audit:cve": "npm audit --audit-level=high"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "electron": "^43.2.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -44,6 +44,21 @@ copy-paste tool ships no sandbox, so the guarantee is zero-knowledge *by
 convention of the interface*, not by an enforced jail. We'd rather tell you the
 true shape of the protection than oversell it.
 
+The newest one is a different shape: **`sasha-desktop`**, a local-only desktop
+window onto your AI-OS. It exists for the one thing a copy-paste prompt cannot do —
+**tell you something without being asked.** When a manager stages a draft for you
+while you are away, or a scheduled check-in goes quietly dead, it rings once and
+shows you the card. One item, silence when there is nothing, quiet hours 9pm–5am by
+default, and no approve-all button anywhere.
+
+**Its honest guarantee:** it makes no network calls of its own — not a policy, a
+tested property. No account, no gateway, no telemetry; it runs the Claude Code you
+already installed under the login you already have, and the only thing it ever
+writes inside `~/ai-os` is an aggregate count you already opted into. See
+[`components/sasha-desktop/`](components/sasha-desktop/) for how each of those is
+enforced rather than asserted. Source build for now — binaries are not published
+yet, and Windows is not supported.
+
 More native components will follow (sync, local indexing, and beyond).
 
 ## Install
@@ -71,6 +86,9 @@ cd ai-os-pro
   or an fscrypt `~/.key/aios` if present).
 - **`model-keys`** — an example: the `/ask-model` skill calls OpenRouter / Gemini /
   DeepSeek using keys held by the broker, so a provider key never enters the chat.
+- **`sasha-desktop`** — the local desktop window (Node 22+, Electron). Not part of
+  the default install; build it directly with
+  `components/sasha-desktop/install.sh`, then `npm start`. Linux and macOS only.
 
 Then **start a fresh Claude Code session** so `/secret` registers, and store your
 first credential:
@@ -86,12 +104,18 @@ and `~/.claude/skills/secret/`.
 
 ## Status
 
-**Early, but real.** Two components ship today: the secrets broker (built,
+**Early, but real.** Three components ship today: the secrets broker (built,
 self-tested — 29 checks — and validated live with real provider keys on macOS
-Keychain and the file/fscrypt fallback) and `model-keys` (`/ask-model` through
-broker-held keys). Unproven so far: the Linux Secret-Service *daemon* path on a
-headless box, and Windows entirely. Claims track reality here — if it isn't
-listed as validated, treat it as not yet.
+Keychain and the file/fscrypt fallback), `model-keys` (`/ask-model` through
+broker-held keys), and `sasha-desktop` (v0.1 — 36 tests, built and run live on
+Linux against a real workspace: the doorbell rings, the cards render, and the
+zero-network probe passes with a positive control and a liveness check).
+
+Unproven so far, stated plainly: the Linux Secret-Service *daemon* path on a
+headless box; Windows entirely; and for `sasha-desktop` specifically — **it has not
+yet run on macOS outside CI**, notifications have not been observed on a real
+desktop session, and no binary has been published. Claims track reality here — if
+it isn't listed as validated, treat it as not yet.
 
 ## Principles (unchanged from Core)
 
