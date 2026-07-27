@@ -47,12 +47,11 @@ true shape of the protection than oversell it.
 The newest one is a different shape: **`sasha-desktop`**, a local-only desktop app
 that puts a real interface on the command-line AI-OS. **You talk to it** — type,
 watch the answer stream, see each tool call as it happens; slash commands work
-because they are just prompts. **And you choose who answers:** Claude through the
-Claude Code login you already have, or any model Ollama has pulled, running entirely
-on your own machine. Both run through the same brain: a loopback
-bridge speaking the Anthropic Messages API lets Claude Code drive the local model, so
-it inherits the same system prompt, tools, skills and memory. The only difference is
-which weights answer — and that nothing leaves the machine.
+because they are just prompts. **And you choose which Claude answers** through the login you already have.
+Local models were carried briefly by an Anthropic→Ollama bridge; it failed its
+pre-stated reliability gate in live trials (1/2 task completion, bar 2/2) and was
+deleted per that falsifier — the honest record is in the component README. The
+local-agent job belongs to opencode, which is gate-passed for it.
 
 **Its honest guarantee:** it contacts no remote host of its own — not a policy, a
 tested property. No account, no gateway, no telemetry. Exactly one file is permitted
@@ -117,10 +116,7 @@ the zero-network probe passes with a positive control and a liveness check).
 Unproven so far, stated plainly: the Linux Secret-Service *daemon* path on a
 headless box; Windows entirely; and for `sasha-desktop` specifically — **it has not
 yet run on macOS outside CI**, notifications have not been observed firing on a real
-desktop session, the local-model bridge has been proven end-to-end against a stub (Claude Code sent a
-full system prompt and 10 tool definitions through it and got a reply back) but never
-against a real `ollama serve` or a real local model,
-and no binary has been published. Claims track reality here — if
+desktop session, **it has not yet run on macOS outside CI beyond the bridge trials**, notifications have not been observed firing on a real desktop session, and no binary has been published. The bridge chapter is CLOSED by its gate: live-trialed on dogma-2, 1/2, deleted per the pre-stated falsifier. Claims track reality here — if
 it isn't listed as validated, treat it as not yet.
 
 ## Principles (unchanged from Core)

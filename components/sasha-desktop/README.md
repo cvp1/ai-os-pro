@@ -15,37 +15,20 @@ makes on your machine as it makes it. Slash commands work because they are just
 prompts — `/status`, `/brief`, `/doctor`, any skill you have installed. It runs in
 your AI-OS workspace, with your memory, your skills, and your files.
 
-**You choose who answers.** A model picker sits in the header: Claude Fable, Opus,
-Sonnet or Haiku through the Claude Code login you already have — or any model Ollama
-has pulled, running entirely on your own machine. That choice is structural, not
-cosmetic: the app speaks a neutral protocol and each provider is an adapter behind
-it, so adding one is a new file rather than a new UI.
+**You choose which Claude answers.** A model picker sits in the header: Fable,
+Opus, Sonnet or Haiku, through the Claude Code login you already have.
 
-**Both run through the same brain.** This is the part that took a rebuild to get
-right. Claude is intelligent here because Claude Code *is* the intelligence — it
-assembles the system prompt, owns the tools, loads your skills and memory, enforces
-permissions, runs the agent loop. v0.2 talked to Ollama's `/api/chat` directly, which
-is a bare completion endpoint, so a local model got none of that. It had no brain
-because the brain was never written.
-
-Rather than re-implement Claude Code badly, Sasha Desktop now starts a **loopback
-bridge** that speaks the Anthropic Messages API and points Claude Code at it with
-`ANTHROPIC_BASE_URL`. So a local model receives the same system prompt, the same
-tools, the same skills, the same memory — the entire harness. The only difference is
-which weights answer.
-
-| | Claude Code | Ollama (local) |
-|---|---|---|
-| Your files and tools | yes | yes |
-| Skills / slash commands | yes | yes |
-| Memory, `CLAUDE.md`, `me/` | yes | yes |
-| Leaves your machine | to Anthropic, as your terminal does | **never** |
-| Cost | metered, shown per turn | none |
-
-**The honest caveat:** giving a small model a large tool surface is not the same as
-it using that surface well. The harness is now identical; whether a 4B local model
-holds a multi-step tool loop together is a question about the *model*, and you should
-expect to find out by trying rather than by reading this table.
+**Local models: not here — and here is the honest record.** For two days this app
+carried an Anthropic→Ollama bridge so Claude Code could drive a local model with
+its full system prompt, tools, skills and memory. It worked mechanically (eleven
+multi-turn tool round-trips in live trials, one trial 4/4 on a real agentic task).
+It then FAILED its pre-stated reliability gate — 1/2 task completion on live
+hardware where the bar, set before the run, was 2/2 — and was deleted per that
+falsifier rather than patched until green or shipped flaky. The record and the
+revival conditions live in `src/main/session/manager.ts`; the code lives in git
+history. For a local agent today, use [opencode](https://opencode.ai) with your
+Ollama models — it is gate-passed for exactly that job. Selecting a local model
+here tells you this instead of half-working.
 
 ## What it is not
 

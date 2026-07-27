@@ -1,28 +1,28 @@
 import { ClaudeBackend } from './claude-backend.js'
-import { startAnthropicBridge, BRIDGE_HOST, type BridgeHandle } from './anthropic-bridge.js'
 import { parseModelId, type Backend, type ModelChoice, type SessionEvent } from './protocol.js'
 
 /**
  * Holds the one live conversation and swaps the model under it.
  *
- * BOTH providers now run through Claude Code. That is the important design decision
- * here, and it is what gives a local model a brain: instead of talking to Ollama's
- * bare completion endpoint — no system prompt, no tools, no memory, no loop — we
- * start a loopback bridge that speaks the Anthropic Messages API, point Claude Code
- * at it with ANTHROPIC_BASE_URL, and let the harness do what it is good at.
- *
- * So a local model gets the same system prompt, the same tools, the same skills and
- * the same memory as Claude does. The only difference is which weights answer.
+ * Claude Code is the only engine. Local models were served for two days by an
+ * Anthropic→Ollama bridge (v0.3); it FAILED its pre-stated gate on 2026-07-27 —
+ * two live trials on dogma-2 against gemma4-e4b, 1/2 task completion where the
+ * bar was 2/2 — and was deleted per that falsifier, not patched until green.
+ * The honest record: the protocol translation itself held (11 multi-turn tool
+ * round-trips, one trial 4/4), but 50% task reliability is not a shippable
+ * surface whoever's fault it is. The local path belongs to opencode (gate-passed
+ * co-equal harness, LOCAL_FLEET.md §4s); it returns HERE only behind a new gate,
+ * with a stronger local model or the portability work that lets another harness
+ * carry Sasha's context. History: `git log -- '*anthropic-bridge*'`.
  *
  * Switching models ends the current backend and starts the next. That is honest
- * rather than clever: sessions do not transfer between models, and silently replaying
- * a transcript into a model that never saw it would make the picker lie about what
- * the new model knows. The UI says the switch happened; the transcript stays as
- * history.
+ * rather than clever: sessions do not transfer between models, and silently
+ * replaying a transcript into a model that never saw it would make the picker lie
+ * about what the new model knows. The UI says the switch happened; the transcript
+ * stays as history.
  */
 export class SessionManager {
   private backend: Backend | null = null
-  private bridge: BridgeHandle | null = null
   private listeners: ((event: SessionEvent) => void)[] = []
   private currentModelId: string | null = null
 
@@ -44,67 +44,42 @@ export class SessionManager {
     return this.currentModelId
   }
 
-  private teardown(): void {
-    this.backend?.close()
-    this.backend = null
-    this.bridge?.close()
-    this.bridge = null
-  }
-
   /** Point the session at a model, tearing down whatever was running. */
   async select(modelId: string, choices: ModelChoice[]): Promise<void> {
     if (this.currentModelId === modelId && this.backend) return
 
-    this.teardown()
+    this.backend?.close()
+    this.backend = null
     this.currentModelId = modelId
 
     const { provider, model } = parseModelId(modelId)
-    const label = choices.find((choice) => choice.id === modelId)?.label ?? model
+
+    if (provider === 'ollama') {
+      // Not silently ignored and not half-supported: say what happened and where
+      // the local path lives now.
+      this.emit({
+        kind: 'error',
+        message:
+          'Local models are no longer served by this app — the bridge that carried ' +
+          'them failed its reliability gate (1/2 task completion, bar was 2/2) and ' +
+          'was removed rather than shipped flaky. For a local agent, use opencode ' +
+          'with your Ollama models; Sasha herself stays on Claude Code here.',
+      })
+      return
+    }
 
     if (!this.harnessPath) {
       this.emit({
         kind: 'error',
         message:
-          'Claude Code is not installed. Sasha Desktop uses it as the engine for every ' +
-          'model — including local ones — so that a local model gets the same tools, ' +
-          'skills and memory. Install Claude Code and reopen this window.',
+          'Claude Code is not installed. Install it and reopen this window — Sasha ' +
+          'Desktop is a window onto your own Claude Code, not a replacement for it.',
       })
       return
     }
 
-    const env: Record<string, string> = {}
-
-    if (provider === 'ollama') {
-      try {
-        this.bridge = await startAnthropicBridge((message) =>
-          this.emit({ kind: 'status', text: message }),
-        )
-        // Claude Code talks to the bridge as if it were Anthropic; the bridge talks
-        // to Ollama. The token is required by the client but never leaves loopback.
-        env.ANTHROPIC_BASE_URL = `http://${BRIDGE_HOST}:${this.bridge.port}`
-        env.ANTHROPIC_AUTH_TOKEN = 'local-bridge'
-        env.ANTHROPIC_MODEL = model
-        // Do not let a stale key or a cloud login preempt the local endpoint.
-        env.ANTHROPIC_API_KEY = ''
-      } catch (error) {
-        this.emit({
-          kind: 'error',
-          message:
-            'Could not start the local-model bridge: ' +
-            (error instanceof Error ? error.message : String(error)),
-        })
-        return
-      }
-    }
-
-    this.backend = new ClaudeBackend(
-      this.harnessPath,
-      this.cwd,
-      model,
-      this.permissionMode,
-      label,
-      env,
-    )
+    const label = choices.find((choice) => choice.id === modelId)?.label ?? model
+    this.backend = new ClaudeBackend(this.harnessPath, this.cwd, model, this.permissionMode, label)
     this.backend.onEvent((event) => this.emit(event))
   }
 
@@ -130,6 +105,7 @@ export class SessionManager {
   }
 
   close(): void {
-    this.teardown()
+    this.backend?.close()
+    this.backend = null
   }
 }

@@ -90,17 +90,7 @@ const FORBIDDEN = [
   {
     id: 'network-client',
     re: /(^|[^.\w])(fetch|XMLHttpRequest)\s*\(|require\(['"](https?|node:https?)['"]\)|from\s+['"]node:https?['"]/,
-    why: "NO REMOTE CONTACT is the product claim. The app opens no sockets except the local-model backend, which is allowlisted below and pinned to loopback.",
-    // Running a local model requires talking to the local model server. That single
-    // file may open a socket; nothing else may. Narrow, named, and enforced — rather
-    // than a blanket exemption that would quietly grow.
-    exceptFiles: [
-      'src/main/session/ollama-backend.ts',
-      // The bridge exists so a LOCAL model can borrow Claude Code's brain. It both
-      // listens (loopback only, OS-assigned port) and calls upstream to Ollama. Both
-      // ends are pinned by the required guarantees below.
-      'src/main/session/anthropic-bridge.ts',
-    ],
+    why: 'NO REMOTE CONTACT is the product claim, and since the bridge was deleted (failed its gate 2026-07-27) NO file in this app opens a socket at all. The one historical exemption is gone; reinstating any network client is a gate proposal, not an edit.',
   },
 ]
 
@@ -129,37 +119,6 @@ const REQUIRED = [
     file: 'main/index.ts',
     re: /sandbox\s*:\s*true/,
     why: 'The sandbox must be explicitly enabled.',
-  },
-  {
-    id: 'ollama-loopback-guard',
-    file: 'main/session/ollama-backend.ts',
-    re: /function assertLoopback/,
-    why: 'The one file allowed to open a socket must carry the loopback guard that keeps that permission honest. If the guard goes, the exemption goes with it.',
-  },
-  {
-    id: 'bridge-binds-loopback',
-    file: 'main/session/anthropic-bridge.ts',
-    re: /const BRIDGE_HOST = '127\.0\.0\.1'/,
-    why: 'The bridge must bind loopback explicitly. A bridge on 0.0.0.0 would hand anything on the network an unauthenticated path to the local model AND to Claude Code\'s tools.',
-  },
-  {
-    id: 'bridge-listens-loopback',
-    file: 'main/session/anthropic-bridge.ts',
-    re: /server\.listen\(0,\s*BRIDGE_HOST/,
-    why: 'The listen call itself must use BRIDGE_HOST — declaring the constant is not the same as binding to it.',
-  },
-  {
-    id: 'bridge-guards-upstream',
-    file: 'main/session/anthropic-bridge.ts',
-    re: /assertLoopback\(OLLAMA_HOST\)[\s\S]*assertLoopback\(OLLAMA_HOST\)/,
-    why: 'The bridge must apply the same loopback guard to its upstream as the direct backend does, on every request path.',
-  },
-  {
-    id: 'ollama-guard-applied',
-    file: 'main/session/ollama-backend.ts',
-    // Declaring the guard is not using it. Require it on the request paths too.
-    re: /assertLoopback\(OLLAMA_HOST\)[\s\S]*assertLoopback\(OLLAMA_HOST\)/,
-    why: 'assertLoopback must actually be called before requests, not merely defined.',
   },
 ]
 
