@@ -168,15 +168,22 @@ function refresh(options: { allowRing: boolean }): void {
 // ---------------------------------------------------------------------------
 
 function trayIcon(): Electron.NativeImage {
+  const path = join(__dirname, '../../resources/trayTemplate.png')
   try {
-    const icon = nativeImage.createFromPath(join(__dirname, '../../resources/trayTemplate.png'))
+    const icon = nativeImage.createFromPath(path)
     if (!icon.isEmpty()) {
+      // A template image is black + alpha; macOS tints it for light/dark menu bars
+      // and Electron picks up the @2x variant beside it automatically.
       icon.setTemplateImage(true)
       return icon
     }
   } catch {
-    // Fall through to the empty image below.
+    // Fall through to the warning below.
   }
+  // Loudly, not silently: an empty tray image renders an INVISIBLE menu-bar item on
+  // macOS. Since the app lives in the tray, that reads to the user as "it didn't
+  // start" — a missing asset must never fail quietly here.
+  console.error(`[sasha] tray icon missing or unreadable at ${path} — the menu-bar icon will be invisible.`)
   return nativeImage.createEmpty()
 }
 
@@ -364,9 +371,16 @@ if (!app.requestSingleInstanceLock()) {
 
     registerIpc()
 
-    tray = new Tray(trayIcon())
-    updateTray()
-    tray.on('click', () => createWindow())
+    // A tray failure must never cost the user the window. The window is the product;
+    // the tray is how you get back to it.
+    try {
+      tray = new Tray(trayIcon())
+      updateTray()
+      tray.on('click', () => createWindow())
+    } catch (error) {
+      console.error('[sasha] could not create the tray icon:', error)
+      tray = null
+    }
 
     createWindow()
 
