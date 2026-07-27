@@ -22,7 +22,49 @@ const runtime = Object.keys(pkg.dependencies ?? {})
 const ALLOWED_DEV = new Set(['typescript', 'electron', '@types/node', 'electron-builder'])
 const unexpectedDev = Object.keys(pkg.devDependencies ?? {}).filter((d) => !ALLOWED_DEV.has(d))
 
+/**
+ * NO NPM LIFECYCLE HOOKS.
+ *
+ * `ignore-scripts=true` is a sensible supply-chain hardening, and anyone security-
+ * minded enough to install this component may well have it set — AI-OS's own author
+ * does. Under it, npm silently skips every pre/post hook while still running scripts
+ * invoked explicitly by name.
+ *
+ * A hook is therefore the worst kind of dependency: it works on most machines and
+ * quietly does nothing on exactly the machines that care most about security. We hit
+ * this for real — a `pretest` hook meant to build before testing never fired, and the
+ * failure surfaced as a confusing missing-module error on a clean clone.
+ *
+ * So: express ordering explicitly inside the script (`"test": "npm run build && …"`),
+ * never as a hook.
+ */
+const NPM_INSTALL_HOOKS = new Set([
+  'preinstall',
+  'install',
+  'postinstall',
+  'prepare',
+  'prepublish',
+  'prepublishOnly',
+  'prepack',
+  'postpack',
+])
+
+const scripts = Object.keys(pkg.scripts ?? {})
+const hooks = scripts.filter((name) => {
+  if (NPM_INSTALL_HOOKS.has(name)) return true
+  const shadowed = name.replace(/^(pre|post)/, '')
+  return /^(pre|post)/.test(name) && shadowed !== name && scripts.includes(shadowed)
+})
+
 const problems = []
+if (hooks.length > 0) {
+  problems.push(
+    `npm lifecycle hooks present: ${hooks.join(', ')}\n` +
+      '      These silently do not run when ignore-scripts=true, which is a posture\n' +
+      '      this component\'s users are likely to have. Put the ordering inside the\n' +
+      '      script instead: "test": "npm run build && node --test …".',
+  )
+}
 if (runtime.length > 0) {
   problems.push(
     `runtime dependencies present: ${runtime.join(', ')}\n` +
