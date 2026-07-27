@@ -40,12 +40,14 @@ echo "Installing build dependencies (Electron + TypeScript; zero runtime depende
 npm install --no-fund --no-audit
 
 echo
-echo "Verifying — security surface, dependency posture, types, and behaviour…"
-npm run verify
-
-echo
 echo "Building…"
 npm run build
+
+echo
+# Build first: the tests import the compiled output, so verifying a clean checkout
+# before building it can only fail. (`pretest` now enforces this independently.)
+echo "Verifying — security surface, dependency posture, types, and behaviour…"
+npm run verify
 
 cat <<EOF
 

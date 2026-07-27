@@ -17,7 +17,8 @@
     "audit:deps": "node scripts/audit-deps.mjs",
     "test": "node --test tests/*.test.mjs",
     "verify": "npm run audit:deps && npm run audit:cve && npm run audit:surface && npm run typecheck && npm run test",
-    "audit:cve": "npm audit --audit-level=high"
+    "audit:cve": "npm audit --audit-level=high",
+    "pretest": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
