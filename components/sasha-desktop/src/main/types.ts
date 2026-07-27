@@ -46,6 +46,14 @@ export interface QuietHours {
 export interface Settings {
   notifications: boolean
   quietHours: QuietHours
+  /** The model chosen last time, so the app opens where you left it. */
+  lastModel?: string
+  /**
+   * Passed to the harness as `--permission-mode`. Defaults to the harness's own
+   * `acceptEdits` rather than anything looser: a GUI must not be the place a user
+   * quietly ends up with fewer guardrails than they had in the terminal.
+   */
+  permissionMode: string
 }
 
 export interface DoctorResult {
@@ -61,4 +69,5 @@ export const DEFAULT_SETTINGS: Settings = {
   // 9pm–5am, on by default. Craig's sleep window ships as everyone's default:
   // a system that respects sleep without being asked is the product's posture.
   quietHours: { enabled: true, startHour: 21, endHour: 5 },
+  permissionMode: 'acceptEdits',
 }

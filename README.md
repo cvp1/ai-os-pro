@@ -44,20 +44,19 @@ copy-paste tool ships no sandbox, so the guarantee is zero-knowledge *by
 convention of the interface*, not by an enforced jail. We'd rather tell you the
 true shape of the protection than oversell it.
 
-The newest one is a different shape: **`sasha-desktop`**, a local-only desktop
-window onto your AI-OS. It exists for the one thing a copy-paste prompt cannot do —
-**tell you something without being asked.** When a manager stages a draft for you
-while you are away, or a scheduled check-in goes quietly dead, it rings once and
-shows you the card. One item, silence when there is nothing, quiet hours 9pm–5am by
-default, and no approve-all button anywhere.
+The newest one is a different shape: **`sasha-desktop`**, a local-only desktop app
+that puts a real interface on the command-line AI-OS. **You talk to it** — type,
+watch the answer stream, see each tool call as it happens; slash commands work
+because they are just prompts. **And you choose who answers:** Claude through the
+Claude Code login you already have, or any model Ollama has pulled, running entirely
+on your own machine. Same window, same workspace, same skills; different brain.
 
-**Its honest guarantee:** it makes no network calls of its own — not a policy, a
-tested property. No account, no gateway, no telemetry; it runs the Claude Code you
-already installed under the login you already have, and the only thing it ever
-writes inside `~/ai-os` is an aggregate count you already opted into. See
-[`components/sasha-desktop/`](components/sasha-desktop/) for how each of those is
-enforced rather than asserted. Source build for now — binaries are not published
-yet, and Windows is not supported.
+**Its honest guarantee:** it contacts no remote host of its own — not a policy, a
+tested property. No account, no gateway, no telemetry. Exactly one file is permitted
+to open a socket (the local-model backend), it is allowlisted by name, and a guard
+refuses any address that is not this machine. See
+[`components/sasha-desktop/`](components/sasha-desktop/) for how each claim is
+enforced rather than asserted. Source build for now — no binaries yet, no Windows.
 
 More native components will follow (sync, local indexing, and beyond).
 
@@ -107,14 +106,16 @@ and `~/.claude/skills/secret/`.
 **Early, but real.** Three components ship today: the secrets broker (built,
 self-tested — 29 checks — and validated live with real provider keys on macOS
 Keychain and the file/fscrypt fallback), `model-keys` (`/ask-model` through
-broker-held keys), and `sasha-desktop` (v0.1 — 36 tests, built and run live on
-Linux against a real workspace: the doorbell rings, the cards render, and the
-zero-network probe passes with a positive control and a liveness check).
+broker-held keys), and `sasha-desktop` (v0.2 — 48 tests, driven end-to-end live on
+Linux: a message typed into the window reached Claude Code over its streaming
+protocol and the reply rendered back with cost and token counts; the doorbell rings;
+the zero-network probe passes with a positive control and a liveness check).
 
 Unproven so far, stated plainly: the Linux Secret-Service *daemon* path on a
 headless box; Windows entirely; and for `sasha-desktop` specifically — **it has not
-yet run on macOS outside CI**, notifications have not been observed on a real
-desktop session, and no binary has been published. Claims track reality here — if
+yet run on macOS outside CI**, notifications have not been observed firing on a real
+desktop session, the Ollama backend has not been exercised against a live daemon,
+and no binary has been published. Claims track reality here — if
 it isn't listed as validated, treat it as not yet.
 
 ## Principles (unchanged from Core)

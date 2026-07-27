@@ -50,14 +50,23 @@ function coerceSettings(value: unknown): Settings {
   const quiet = isRecord(value.quietHours) ? value.quietHours : {}
   const hour = (v: unknown, fallback: number) =>
     typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 23 ? v : fallback
-  return {
+  // Only modes the harness actually accepts. An unrecognised value from a hand-edited
+  // file resolves to the safe default rather than being passed through to the CLI.
+  const MODES = ['acceptEdits', 'auto', 'manual', 'plan', 'dontAsk', 'bypassPermissions']
+  const settings: Settings = {
     notifications: typeof value.notifications === 'boolean' ? value.notifications : DEFAULT_SETTINGS.notifications,
     quietHours: {
       enabled: typeof quiet.enabled === 'boolean' ? quiet.enabled : DEFAULT_SETTINGS.quietHours.enabled,
       startHour: hour(quiet.startHour, DEFAULT_SETTINGS.quietHours.startHour),
       endHour: hour(quiet.endHour, DEFAULT_SETTINGS.quietHours.endHour),
     },
+    permissionMode:
+      typeof value.permissionMode === 'string' && MODES.includes(value.permissionMode)
+        ? value.permissionMode
+        : DEFAULT_SETTINGS.permissionMode,
   }
+  if (typeof value.lastModel === 'string') settings.lastModel = value.lastModel
+  return settings
 }
 
 /**

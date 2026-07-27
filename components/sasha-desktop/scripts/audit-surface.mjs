@@ -16,7 +16,7 @@
  * Run: npm run audit:surface   (part of `npm run verify`)
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative, extname } from 'node:path'
+import { join, relative, extname, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
@@ -90,7 +90,11 @@ const FORBIDDEN = [
   {
     id: 'network-client',
     re: /(^|[^.\w])(fetch|XMLHttpRequest)\s*\(|require\(['"](https?|node:https?)['"]\)|from\s+['"]node:https?['"]/,
-    why: 'ZERO TELEMETRY is the product claim. The app makes no outbound requests; the only network traffic on the machine is the user\'s own harness talking to the user\'s own provider.',
+    why: "NO REMOTE CONTACT is the product claim. The app opens no sockets except the local-model backend, which is allowlisted below and pinned to loopback.",
+    // Running a local model requires talking to the local model server. That single
+    // file may open a socket; nothing else may. Narrow, named, and enforced — rather
+    // than a blanket exemption that would quietly grow.
+    exceptFiles: ['src/main/session/ollama-backend.ts'],
   },
 ]
 
@@ -120,6 +124,19 @@ const REQUIRED = [
     re: /sandbox\s*:\s*true/,
     why: 'The sandbox must be explicitly enabled.',
   },
+  {
+    id: 'ollama-loopback-guard',
+    file: 'main/session/ollama-backend.ts',
+    re: /function assertLoopback/,
+    why: 'The one file allowed to open a socket must carry the loopback guard that keeps that permission honest. If the guard goes, the exemption goes with it.',
+  },
+  {
+    id: 'ollama-guard-applied',
+    file: 'main/session/ollama-backend.ts',
+    // Declaring the guard is not using it. Require it on the request paths too.
+    re: /assertLoopback\(OLLAMA_HOST\)[\s\S]*assertLoopback\(OLLAMA_HOST\)/,
+    why: 'assertLoopback must actually be called before requests, not merely defined.',
+  },
 ]
 
 function walk(dir) {
@@ -143,8 +160,10 @@ const failures = []
 for (const file of files) {
   const rel = relative(ROOT, file)
   const source = stripComments(readFileSync(file, 'utf8'))
+  const relPosix = rel.split(sep).join('/')
   source.split('\n').forEach((line, i) => {
     for (const rule of FORBIDDEN) {
+      if (rule.exceptFiles?.includes(relPosix)) continue
       if (rule.re.test(line)) {
         failures.push({ rule: rule.id, why: rule.why, where: `${rel}:${i + 1}`, line: line.trim() })
       }

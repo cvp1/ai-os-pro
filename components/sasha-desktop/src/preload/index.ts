@@ -25,6 +25,22 @@ const api = {
   refresh: () => ipcRenderer.invoke('desk:refresh'),
   runDoctor: () => ipcRenderer.invoke('desk:run-doctor'),
 
+  // The conversation.
+  getModels: () => ipcRenderer.invoke('desk:get-models'),
+  getModel: () => ipcRenderer.invoke('desk:get-model'),
+  selectModel: (id: string) => ipcRenderer.invoke('desk:select-model', id),
+  refreshModels: () => ipcRenderer.invoke('desk:refresh-models'),
+  send: (text: string) => ipcRenderer.invoke('desk:send', text),
+  interrupt: () => ipcRenderer.invoke('desk:interrupt'),
+
+  /** Streaming session events: text, thinking, tool use, turn end, errors. */
+  onSession: (callback: (event: unknown) => void) => {
+    ipcRenderer.on('desk:session', (_event, payload) => callback(payload))
+  },
+  onModels: (callback: (payload: unknown) => void) => {
+    ipcRenderer.on('desk:models', (_event, payload) => callback(payload))
+  },
+
   /** Main pushes a fresh item list after every scan. */
   onItems: (callback: (items: unknown) => void) => {
     ipcRenderer.on('desk:items', (_event, items) => callback(items))

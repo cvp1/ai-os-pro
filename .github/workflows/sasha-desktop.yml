@@ -49,7 +49,7 @@ jobs:
       # on macOS the GitHub runner already has a window server.
       - name: Zero-telemetry probe (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a node --test tests/no-network.test.mjs
+        run: SASHA_NO_NOTIFICATIONS=1 xvfb-run -a node --test tests/no-network.test.mjs
 
       - name: Zero-telemetry probe (macOS)
         if: runner.os == 'macOS'

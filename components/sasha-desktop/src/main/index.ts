@@ -11,10 +11,14 @@ import {
 } from 'electron'
 import { join, resolve, relative, isAbsolute } from 'node:path'
 import { readFileSync } from 'node:fs'
+import { execFile } from 'node:child_process'
 
 import { discoverInstall, aiosRoot } from './aios/discover.js'
 import { findHarness, harnessVersion } from './aios/harness.js'
 import { runDoctor } from './aios/doctor.js'
+import { SessionManager } from './session/manager.js'
+import { availableModels, defaultModel } from './session/models.js'
+import type { ModelChoice } from './session/protocol.js'
 import { scan } from './doorbell/watcher.js'
 import { loadState, saveState, statePath, type DeskState } from './doorbell/state.js'
 import { recordUsage } from './doorbell/usage.js'
@@ -57,6 +61,8 @@ let pollTimer: NodeJS.Timeout | null = null
 let install: InstallState = { found: false }
 let state: DeskState = { dismissed: {}, notified: {}, settings: { ...DEFAULT_SETTINGS } }
 let items: BellItem[] = []
+let chat: SessionManager | null = null
+let models: ModelChoice[] = []
 
 function deskStatePath(): string {
   return statePath(app.getPath('userData'))
@@ -97,8 +103,41 @@ function createWindow(): void {
     },
   })
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  // Show on first paint — but never depend on it. `ready-to-show` does not fire if
+  // the renderer fails to reach a first frame, and the result is a process that is
+  // running perfectly with no window on screen: indistinguishable, to the user, from
+  // an app that did not start. The fallback guarantees a window either way.
+  let shown = false
+  const reveal = () => {
+    if (shown || !mainWindow || mainWindow.isDestroyed()) return
+    shown = true
+    mainWindow.show()
+  }
+  mainWindow.once('ready-to-show', reveal)
+  const revealTimer = setTimeout(() => {
+    if (!shown) {
+      console.error('[sasha] renderer did not reach first paint within 4s — showing the window anyway.')
+      reveal()
+    }
+  }, 4000)
+
+  // Renderer failures must be visible in the log rather than swallowed.
+  mainWindow.webContents.on('did-fail-load', (_e, code, description, url) => {
+    console.error(`[sasha] failed to load ${url}: ${description} (${code})`)
+    reveal()
+  })
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    console.error(`[sasha] renderer process gone: ${details.reason}`)
+  })
+  mainWindow.webContents.on('preload-error', (_e, preloadPath, error) => {
+    console.error(`[sasha] preload failed (${preloadPath}): ${error.message}`)
+  })
+  mainWindow.webContents.on('console-message', (event) => {
+    if (event.level === 'error') console.error(`[renderer] ${event.message}`)
+  })
+
   mainWindow.on('closed', () => {
+    clearTimeout(revealTimer)
     mainWindow = null
   })
 
@@ -112,30 +151,129 @@ function createWindow(): void {
   )
 
   void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+
 }
 
 // ---------------------------------------------------------------------------
 // The doorbell
 // ---------------------------------------------------------------------------
 
+/**
+ * Latched off when the desktop's notification service turns out to be unusable.
+ *
+ * This is not hypothetical. On Linux, `Notification.show()` goes through libnotify to
+ * a D-Bus notification daemon; when no daemon is listening, that call BLOCKS the main
+ * process for the full D-Bus timeout — about 25 seconds. Blocking the main process
+ * blocks everything: the window cannot paint, timers do not fire, the UI is frozen.
+ *
+ * We hit this for real. With something waiting in the workspace, the app started, the
+ * doorbell tried to ring, and the window never appeared at all — a secondary feature
+ * silently preventing the primary one. So: time the call, and if it stalls, stop
+ * ringing for the rest of the session and say why. A doorbell that cannot ring is a
+ * small loss; an app that will not open is a total one.
+ */
+let notificationsUsable = true
+const NOTIFY_STALL_MS = 2000
+
+/**
+ * Ask — off the main thread — whether anything is actually listening for
+ * notifications, BEFORE we ever call a blocking API.
+ *
+ * The stall detector below is a backstop, not a cure: by the time it measures 25
+ * seconds, the user has already watched the app hang for 25 seconds. The only way to
+ * avoid the freeze is to not make the call at all, which means knowing in advance.
+ *
+ * A session bus existing is NOT enough — this machine has one and still has no
+ * notification daemon on it. The question is specifically whether
+ * `org.freedesktop.Notifications` has an owner, which a short-lived child process can
+ * answer without blocking us.
+ *
+ * Unknown resolves to "unavailable". Losing the bell is a small, visible loss; a
+ * frozen window is a total one, so the ambiguous case degrades toward the app that
+ * still works.
+ */
+function probeNotificationService(): Promise<boolean> {
+  // An explicit opt-out, for headless boxes, CI, and anyone who wants the window
+  // without the bell. Also the honest answer to a case the probe below CANNOT
+  // detect: a daemon that owns the D-Bus name but never replies (a wedged daemon, or
+  // a session whose daemon belongs to a different display). NameHasOwner says "yes"
+  // and the call still blocks for over a minute. When that is your situation, this
+  // switch is the fix.
+  if (process.env.SASHA_NO_NOTIFICATIONS === '1') return Promise.resolve(false)
+
+  // macOS and Windows use native APIs that do not have this failure mode.
+  if (process.platform !== 'linux') return Promise.resolve(true)
+
+  const attempts: [string, string[]][] = [
+    [
+      'gdbus',
+      ['call', '--session', '--dest', 'org.freedesktop.DBus', '--object-path', '/org/freedesktop/DBus',
+       '--method', 'org.freedesktop.DBus.NameHasOwner', 'org.freedesktop.Notifications'],
+    ],
+    ['busctl', ['--user', 'status', 'org.freedesktop.Notifications']],
+  ]
+
+  return new Promise((resolve) => {
+    let index = 0
+    const next = (): void => {
+      const attempt = attempts[index++]
+      if (!attempt) {
+        console.error(
+          '[sasha] could not determine whether a notification daemon is running; ' +
+            'notifications are off. Waiting items still appear in the window.',
+        )
+        resolve(false)
+        return
+      }
+      const [command, args] = attempt
+      execFile(command, args, { timeout: 2500 }, (error, stdout) => {
+        if (error) {
+          next()
+          return
+        }
+        resolve(command === 'gdbus' ? /true/.test(stdout) : true)
+      })
+    }
+    next()
+  })
+}
+
 function ring(item: BellItem): void {
-  if (!Notification.isSupported()) return
+  if (!notificationsUsable || !Notification.isSupported()) return
 
-  const notification = new Notification({
-    title: item.kind === 'dead-job' ? 'Sasha — something stopped' : 'Sasha',
-    body: item.headline,
-    silent: false,
-  })
+  try {
+    const notification = new Notification({
+      title: item.kind === 'dead-job' ? 'Sasha — something stopped' : 'Sasha',
+      body: item.headline,
+      silent: false,
+    })
 
-  // Clicking opens the window on the card. The decision itself always happens in
-  // the window, never on the notification: propose-only means you see the whole
-  // thing before you approve it, and a notification button is too easy to hit.
-  notification.on('click', () => {
-    createWindow()
-    mainWindow?.webContents.send('desk:focus-item', item.id)
-  })
+    // Clicking opens the window on the card. The decision itself always happens in
+    // the window, never on the notification: propose-only means you see the whole
+    // thing before you approve it, and a notification button is too easy to hit.
+    notification.on('click', () => {
+      createWindow()
+      mainWindow?.webContents.send('desk:focus-item', item.id)
+    })
 
-  notification.show()
+    const started = Date.now()
+    notification.show()
+    const elapsed = Date.now() - started
+
+    if (elapsed > NOTIFY_STALL_MS) {
+      notificationsUsable = false
+      console.error(
+        `[sasha] the desktop notification service took ${elapsed}ms and is blocking the app — ` +
+          'notifications are off for this session. Items still appear in the window. ' +
+          '(On Linux this usually means no notification daemon is running.)',
+      )
+      updateTray()
+      mainWindow?.webContents.send('desk:notifications-unavailable')
+    }
+  } catch (error) {
+    notificationsUsable = false
+    console.error('[sasha] notifications unavailable:', error)
+  }
 }
 
 function refresh(options: { allowRing: boolean }): void {
@@ -210,9 +348,12 @@ function updateTray(): void {
       { label: 'Check now', click: () => refresh({ allowRing: true }) },
       { type: 'separator' },
       {
-        label: `Notifications${state.settings.notifications ? '' : ' (off)'}`,
+        label: notificationsUsable
+          ? `Notifications${state.settings.notifications ? '' : ' (off)'}`
+          : 'Notifications unavailable on this desktop',
         type: 'checkbox',
-        checked: state.settings.notifications,
+        checked: state.settings.notifications && notificationsUsable,
+        enabled: notificationsUsable,
         click: () => {
           state.settings.notifications = !state.settings.notifications
           persist()
@@ -320,6 +461,35 @@ function registerIpc(): void {
 
   ipcMain.handle('desk:run-doctor', () => runDoctor(install))
 
+  // --- the conversation -----------------------------------------------------
+
+  ipcMain.handle('desk:get-models', () => models)
+  ipcMain.handle('desk:get-model', () => chat?.modelId ?? null)
+
+  ipcMain.handle('desk:select-model', (_event, modelId: unknown) => {
+    if (typeof modelId !== 'string' || !chat) return false
+    if (!models.some((choice) => choice.id === modelId)) return false
+    chat.select(modelId, models)
+    state.settings.lastModel = modelId
+    persist()
+    return true
+  })
+
+  ipcMain.handle('desk:send', async (_event, text: unknown) => {
+    if (typeof text !== 'string' || text.trim() === '' || !chat) return false
+    return chat.send(text)
+  })
+
+  ipcMain.handle('desk:interrupt', () => {
+    chat?.interrupt()
+    return true
+  })
+
+  ipcMain.handle('desk:refresh-models', async () => {
+    models = await availableModels(findHarness().found)
+    return models
+  })
+
   ipcMain.handle('desk:refresh', () => {
     refresh({ allowRing: false })
     return items
@@ -369,6 +539,23 @@ if (!app.requestSingleInstanceLock()) {
     state = loadState(deskStatePath())
     install = discoverInstall()
 
+    // The conversation is the product; stand it up before the window opens so the
+    // first thing the user sees is a session ready for a message.
+    const harness = findHarness()
+    chat = new SessionManager(
+      harness.path,
+      install.root ?? aiosRoot(),
+      state.settings.permissionMode,
+    )
+    chat.onEvent((event) => mainWindow?.webContents.send('desk:session', event))
+
+    void availableModels(harness.found).then((choices) => {
+      models = choices
+      const chosen = defaultModel(choices, state.settings.lastModel)
+      if (chosen) chat?.select(chosen, choices)
+      mainWindow?.webContents.send('desk:models', { models, selected: chosen })
+    })
+
     registerIpc()
 
     // A tray failure must never cost the user the window. The window is the product;
@@ -384,9 +571,20 @@ if (!app.requestSingleInstanceLock()) {
 
     createWindow()
 
-    // First pass rings if something is genuinely waiting — that IS the product.
-    refresh({ allowRing: true })
-    pollTimer = setInterval(() => refresh({ allowRing: true }), POLL_INTERVAL_MS)
+    // THE WINDOW COMES FIRST. Scanning and ringing touch system services that can
+    // stall (see `ring`), so they must never sit between startup and a visible
+    // window. One tick of daylight is enough for the renderer to paint and show.
+    // Settle the notification question BEFORE the first scan, so the doorbell can
+    // never make a blocking call on a desktop that cannot service it.
+    void probeNotificationService().then((usable) => {
+      if (!usable) {
+        notificationsUsable = false
+        console.error('[sasha] no notification daemon found — the bell is off; items still show in the window.')
+        updateTray()
+      }
+      refresh({ allowRing: true })
+      pollTimer = setInterval(() => refresh({ allowRing: true }), POLL_INTERVAL_MS)
+    })
 
     app.on('activate', () => createWindow())
   })

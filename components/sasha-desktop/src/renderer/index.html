@@ -9,7 +9,7 @@
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>Sasha</title>
     <link rel="stylesheet" href="./styles.css" />
@@ -19,10 +19,14 @@
       <div class="wordmark">
         <h1>Sasha</h1>
         <!-- D53: Sasha never ships bare. The function tagline rides every surface. -->
-        <p class="tagline">a personal AI that is yours — it works while you are away, and tells you when it did</p>
+        <p class="tagline">a personal AI that is yours — your files, your models, your machine</p>
       </div>
       <div class="masthead-actions">
-        <button id="refresh" type="button" class="ghost">Check now</button>
+        <label class="model-picker">
+          <span class="model-label">Model</span>
+          <select id="model-select"></select>
+        </label>
+        <button id="bell-toggle" type="button" class="ghost">Waiting</button>
       </div>
     </header>
 
@@ -31,28 +35,29 @@
       <p id="status-detail" class="muted"></p>
     </section>
 
-    <main>
-      <section id="bell" class="bell"></section>
+    <!-- The doorbell, demoted to a drawer: it matters, but it is not the product. -->
+    <section id="bell-drawer" class="bell-drawer" hidden>
+      <div class="drawer-head">
+        <h2>Waiting for you</h2>
+        <button id="refresh" type="button" class="ghost small-btn">Check now</button>
+      </div>
+      <div id="bell" class="bell"></div>
+    </section>
 
-      <section class="doctor">
-        <div class="doctor-head">
-          <h2>System check</h2>
-          <button id="run-doctor" type="button" class="ghost">Run /doctor</button>
-        </div>
-        <p class="muted small">
-          Runs the same <code>/doctor</code> your terminal runs, in your own Claude Code, and
-          shows exactly what it said.
-        </p>
-        <pre id="doctor-output" class="doctor-output" hidden></pre>
-      </section>
-    </main>
+    <main id="transcript" class="transcript"></main>
 
-    <footer class="footer">
-      <p id="footer-settings" class="muted small"></p>
-      <p class="muted small">
-        Local only. No account, no gateway, no telemetry — the only thing that leaves this
-        machine is your own Claude Code talking to your own provider.
-      </p>
+    <footer class="composer">
+      <div class="composer-row">
+        <textarea
+          id="input"
+          rows="1"
+          placeholder="Ask Sasha anything, or type / for a command…"
+          autofocus
+        ></textarea>
+        <button id="send" type="button" class="primary">Send</button>
+        <button id="stop" type="button" class="ghost" hidden>Stop</button>
+      </div>
+      <p id="composer-hint" class="muted small"></p>
     </footer>
 
     <script type="module" src="./main.js"></script>

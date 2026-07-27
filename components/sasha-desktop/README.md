@@ -1,46 +1,54 @@
 # Sasha Desktop
 
-**The window your AI-OS opens when it has something for you.**
+**Your Claude Code session, in a window — and not only Claude.**
 
-Native component #3. A small, local-only desktop app that sits on top of an
-existing AI-OS install and your own Claude Code login.
+Native component #3. A local-only desktop app that puts a real interface on the
+command-line AI-OS you already have, and lets you point it at a different model
+without changing anything else.
 
 ---
 
-## The one thing it does
+## What it does
 
-AI-OS can already work for you while you are away — a project manager drafts your
-weekly status, a scheduled check-in runs, something gets staged in a `proposals/`
-folder. Until now, finding out required *showing up and asking*: the bell only rang
-at the start of a session, because a copy-paste prompt has no way to tap you on the
-shoulder.
+**You talk to it.** Type a message, watch the answer stream, see every tool call it
+makes on your machine as it makes it. Slash commands work because they are just
+prompts — `/status`, `/brief`, `/doctor`, any skill you have installed. It runs in
+your AI-OS workspace, with your memory, your skills, and your files.
 
-Sasha Desktop is that shoulder tap. When something is staged for you, or when a
-scheduled job goes quietly dead, it says so once — a native notification, one line,
-one item. Then it gets out of the way.
+**You choose who answers.** A model picker sits in the header. Claude Fable, Opus,
+Sonnet, or Haiku through the Claude Code login you already have — or any model
+Ollama has pulled, running entirely on your own machine. Same window, same
+workspace, same skills; different brain. That choice is structural, not cosmetic:
+the app speaks a neutral protocol and each provider is an adapter behind it, so
+adding one is a new file rather than a new UI.
 
-That is the whole product. Everything else here exists to make that trustworthy.
+**It tells you when something is waiting.** The doorbell from v0.1 is still here,
+demoted to where it belongs — a drawer in the header. When a manager stages a draft
+while you were away, or a scheduled job goes quietly dead, it rings once and shows
+you a card. One item, silence when there is nothing, quiet hours 9pm–5am.
 
 ## What it is not
 
-- **Not a chat client.** Claude Code's own desktop app is the front door for
-  conversation, and it is better at it than we would be. This is the surface for
-  the things you did *not* think to ask about.
-- **Not a harness.** It ships no model, holds no key, and signs in to nothing. It
-  runs the `claude` binary you already installed, under the login you already have.
-- **Not a place your data goes.** There is no account, no server, no sync.
+- **Not a replacement for the terminal.** It drives the same `claude` binary you
+  already installed, through its documented streaming protocol — not by scraping a
+  terminal. Everything you do here you could do at the command line; this just makes
+  it reachable without one.
+- **Not a harness.** It ships no model, holds no key, and signs in to nothing.
+- **Not a place your data goes.** No account, no server, no sync, no gateway.
 
 ## The honest guarantee
 
-**It contacts no remote host.** Not "we don't sell your data" — there is no server
-to send it to. The only outbound traffic on your machine is your own Claude Code
-talking to your own model provider, exactly as it does from your terminal.
+**It contacts no remote host of its own.** Not "we don't sell your data" — there is
+no server to send it to. The only traffic is your own Claude Code talking to your
+own model provider, exactly as it does from your terminal, or a local model that
+never leaves the machine at all.
 
 That is a strong claim, so it is tested rather than asserted:
 
 | Claim | How it is enforced |
 |---|---|
 | No contact with any external host | `tests/no-network.test.mjs` boots the real app behind a proxy we control and inspects everything it tries to reach — with a positive control proving the probe can see traffic, and a liveness check proving the app was actually running (a crashed app also makes no connections). The Node plane is closed separately by `audit:surface`, which fails the build if `fetch`, `XMLHttpRequest`, or `node:http`/`https` appear anywhere in `src/`. |
+| Exactly one file may open a socket | The local-model backend needs to reach the local model server, so `audit:surface` allows `src/main/session/ollama-backend.ts` **by name** and nothing else. That permission is kept honest by `assertLoopback`, which refuses any host that is not `127.0.0.1`/`::1`/`localhost` — including another machine on your own LAN — and `session.test.mjs` proves the guard bites. The audit also *requires* the guard to be present and applied, so deleting it breaks the build. |
 | Zero runtime dependencies | `audit:deps` fails if `dependencies` is non-empty. Everything shipped is Electron, Node's standard library, and code in this folder. |
 | The page cannot reach your machine | `audit:surface` requires `contextIsolation`, `sandbox`, and a `default-src 'self'` CSP, and forbids `nodeIntegration`, `eval`, remote loads, and `innerHTML`. |
 | Your files stay yours | The app reads `~/ai-os`. The **only** thing it ever writes there is an aggregate count in `.aios-usage.jsonl` — and only if that file already exists, because Core says counting is opt-in. Its own bookkeeping lives in the app's data directory, not in your workspace. |
@@ -126,16 +134,36 @@ with a published `sha256`: a hash you verify beats a certificate we rent.
 ```bash
 npm run dev       # build + launch
 npm run verify    # deps + CVEs + security surface + types + tests
-npm test          # 36 tests
+npm test          # 48 tests
 ```
 
 The runtime network probe needs a display. On a headless Linux box:
-`xvfb-run -a node --test tests/no-network.test.mjs`
+`SASHA_NO_NOTIFICATIONS=1 xvfb-run -a node --test tests/no-network.test.mjs`
+
+**`SASHA_NO_NOTIFICATIONS=1`** turns the bell off entirely. You want it on any
+machine without a working notification daemon — see below.
+
+### When notifications can freeze a desktop app
+
+On Linux, `Notification.show()` calls libnotify, which makes a **synchronous D-Bus
+call**. If nothing services it, that call blocks the main process for ~25 seconds
+per attempt. Blocking the main process blocks *everything* — the window cannot even
+paint. We found this the hard way: with items waiting in the workspace, the app
+started, tried to ring, and no window ever appeared. A secondary feature was
+silently preventing the primary one.
+
+Three defences, in order of preference: the window is shown **before** anything that
+touches system services; a background probe checks whether
+`org.freedesktop.Notifications` actually has an owner before we ever make the call;
+and if a call does stall past two seconds, the bell latches off for the session and
+says so. The probe cannot detect a daemon that owns the name but never *replies* —
+that is what the environment variable is for.
 
 ## Layout
 
 ```
 src/main/           the only privileged code
+  session/          the conversation: neutral protocol + one adapter per provider
   aios/             find the install, find the harness, run /doctor
   doorbell/         proposals, heartbeats, dismissal memory, the counter
 src/preload/        the complete list of things the page may do
