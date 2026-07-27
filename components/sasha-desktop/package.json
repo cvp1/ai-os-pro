@@ -1,6 +1,6 @@
 {
   "name": "sasha-desktop",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "Sasha Desktop — the window your AI-OS opens when it has something for you. Local-only, zero runtime dependencies.",
   "license": "Apache-2.0",
