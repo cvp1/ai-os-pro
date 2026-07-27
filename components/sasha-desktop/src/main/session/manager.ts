@@ -69,6 +69,22 @@ export class SessionManager {
       this.emit({ kind: 'error', message: 'Pick a model first — nothing is selected.' })
       return false
     }
+
+    // A slash command is a Claude Code concept. Sent to a bare local model it is just
+    // a string, and the model will cheerfully invent an answer — a wrong answer that
+    // looks exactly like a right one. Refuse instead, and say why. Silently doing
+    // the wrong thing is the failure mode worth spending a guard on.
+    if (this.currentModelId?.startsWith('ollama:') && /^\s*\//.test(text)) {
+      const command = text.trim().split(/\s+/)[0]
+      this.emit({
+        kind: 'error',
+        message:
+          `${command} is a Claude Code skill, and local models cannot run skills — they have ` +
+          'no tools, no access to your files, and no memory. Switch to a Claude model to use ' +
+          `${command}, or ask the local model a plain question.`,
+      })
+      return false
+    }
     try {
       await this.backend.send(text)
       return true

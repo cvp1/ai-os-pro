@@ -41,7 +41,10 @@ export async function availableModels(harnessFound: boolean): Promise<ModelChoic
       id: `ollama:${name}`,
       label: name,
       provider: 'ollama',
-      detail: 'Runs entirely on this machine — nothing leaves it',
+      // Say the limitation in the same breath as the benefit. A local model here is a
+      // bare chat: no tools, no files, no skills, no memory. Selling it as "Sasha, but
+      // local" would be the kind of overclaim this project exists not to make.
+      detail: 'Runs on this machine — plain chat only: no tools, files, skills or memory',
       local: true,
     })
   }

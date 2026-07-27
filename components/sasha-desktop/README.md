@@ -15,12 +15,29 @@ makes on your machine as it makes it. Slash commands work because they are just
 prompts — `/status`, `/brief`, `/doctor`, any skill you have installed. It runs in
 your AI-OS workspace, with your memory, your skills, and your files.
 
-**You choose who answers.** A model picker sits in the header. Claude Fable, Opus,
-Sonnet, or Haiku through the Claude Code login you already have — or any model
-Ollama has pulled, running entirely on your own machine. Same window, same
-workspace, same skills; different brain. That choice is structural, not cosmetic:
-the app speaks a neutral protocol and each provider is an adapter behind it, so
-adding one is a new file rather than a new UI.
+**You choose who answers.** A model picker sits in the header: Claude Fable, Opus,
+Sonnet or Haiku through the Claude Code login you already have — or any model Ollama
+has pulled, running entirely on your own machine. That choice is structural, not
+cosmetic: the app speaks a neutral protocol and each provider is an adapter behind
+it, so adding one is a new file rather than a new UI.
+
+**The two are not equal, and the app says so.** Only the Claude path is *Sasha* —
+your workspace, skills, memory and tools. A local model here is a **plain chat**: no
+tools, no access to your files, no skills, no memory. That is a real limitation of
+running a bare model server, not a temporary gap we are glossing over.
+
+| | Claude Code | Ollama (local) |
+|---|---|---|
+| Your files and tools | yes | **no** |
+| Skills / slash commands | yes | **no** |
+| Memory, `CLAUDE.md`, `me/` | yes | **no** |
+| Leaves your machine | to Anthropic, as your terminal does | **never** |
+| Cost | metered, shown per turn | none |
+
+Typing `/brief` at a local model would otherwise send the literal text `/brief` to a
+model with no such concept, and it would invent a plausible answer. The app refuses
+that instead and tells you to switch — a wrong answer that looks right is worse than
+no answer.
 
 **It tells you when something is waiting.** The doorbell from v0.1 is still here,
 demoted to where it belongs — a drawer in the header. When a manager stages a draft

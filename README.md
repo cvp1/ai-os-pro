@@ -49,7 +49,9 @@ that puts a real interface on the command-line AI-OS. **You talk to it** — typ
 watch the answer stream, see each tool call as it happens; slash commands work
 because they are just prompts. **And you choose who answers:** Claude through the
 Claude Code login you already have, or any model Ollama has pulled, running entirely
-on your own machine. Same window, same workspace, same skills; different brain.
+on your own machine. The two are not equal and the app says so plainly — only the
+Claude path carries your skills, files and memory; a local model is a plain chat that
+never leaves the machine.
 
 **Its honest guarantee:** it contacts no remote host of its own — not a policy, a
 tested property. No account, no gateway, no telemetry. Exactly one file is permitted
@@ -114,7 +116,8 @@ the zero-network probe passes with a positive control and a liveness check).
 Unproven so far, stated plainly: the Linux Secret-Service *daemon* path on a
 headless box; Windows entirely; and for `sasha-desktop` specifically — **it has not
 yet run on macOS outside CI**, notifications have not been observed firing on a real
-desktop session, the Ollama backend has not been exercised against a live daemon,
+desktop session, the Ollama backend has been proven end-to-end against a stub but not against a real
+`ollama serve`,
 and no binary has been published. Claims track reality here — if
 it isn't listed as validated, treat it as not yet.
 

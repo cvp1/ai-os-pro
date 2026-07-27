@@ -93,3 +93,54 @@ test('with nothing available the answer is null, not a guess', () => {
   assert.equal(defaultModel([]), null)
   assert.equal(defaultModel([], 'claude:fable'), null)
 })
+
+// ---------------------------------------------------------------------------
+// Slash commands must never be silently handed to a bare local model
+// ---------------------------------------------------------------------------
+
+import { SessionManager } from '../out/main/session/manager.js'
+
+const LOCAL = [{ id: 'ollama:x', label: 'x', provider: 'ollama', detail: '', local: true }]
+
+function capture(manager) {
+  const events = []
+  manager.onEvent((e) => events.push(e))
+  return events
+}
+
+test('a slash command to a LOCAL model is refused, not silently answered', async () => {
+  // The failure this prevents: "/brief" reaches a bare model as literal text, the
+  // model invents a confident briefing, and the user cannot tell it is fiction.
+  // A refusal is worse UX and far better behaviour.
+  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits')
+  const events = capture(manager)
+  manager.select('ollama:x', LOCAL)
+
+  const sent = await manager.send('/brief')
+  assert.equal(sent, false, 'the message must not be sent')
+
+  const error = events.find((e) => e.kind === 'error')
+  assert.ok(error, 'the user must be told why')
+  assert.match(error.message, /\/brief/)
+  assert.match(error.message, /cannot run skills/)
+})
+
+test('the refusal covers leading whitespace and arguments', async () => {
+  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits')
+  capture(manager)
+  manager.select('ollama:x', LOCAL)
+  assert.equal(await manager.send('  /status --deep'), false)
+})
+
+test('ordinary questions to a local model are NOT refused', async () => {
+  // The guard must be narrow: only slash commands, nothing else.
+  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits')
+  const events = capture(manager)
+  manager.select('ollama:x', LOCAL)
+  await manager.send('what is 2 + 2?')
+  assert.equal(
+    events.some((e) => e.kind === 'error' && /cannot run skills/.test(e.message)),
+    false,
+    'a plain question must pass through',
+  )
+})

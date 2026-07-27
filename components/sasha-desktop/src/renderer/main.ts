@@ -333,7 +333,7 @@ function updateHint(models: ModelChoice[], selected: string | null): void {
     return
   }
   hintEl.textContent = model.local
-    ? `${model.label} runs on this machine — nothing leaves it.`
+    ? `${model.label} runs entirely on this machine — but it is a plain chat: no tools, no access to your files, no skills or memory. Slash commands need a Claude model.`
     : `${model.label} · ${model.detail}`
 }
 
