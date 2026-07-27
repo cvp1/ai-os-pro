@@ -16,6 +16,9 @@ import { execFile } from 'node:child_process'
 import { discoverInstall, aiosRoot } from './aios/discover.js'
 import { findHarness, harnessVersion } from './aios/harness.js'
 import { runDoctor } from './aios/doctor.js'
+import { readKnowledge, readDoc } from './aios/knowledge.js'
+import { discoverSkills } from './aios/skills.js'
+import { describeDataPath } from './aios/datapath.js'
 import { SessionManager } from './session/manager.js'
 import { availableModels, defaultModel } from './session/models.js'
 import type { ModelChoice } from './session/protocol.js'
@@ -460,6 +463,40 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('desk:run-doctor', () => runDoctor(install))
+
+  // --- what Sasha knows, what it can do, where the data goes -----------------
+
+  /**
+   * READ-ONLY, and there is no sibling that writes. Changing memory or me/ happens
+   * by asking Sasha in the conversation, where the install's own rules about what is
+   * worth remembering still apply. The panel routes; it does not edit.
+   */
+  ipcMain.handle('desk:get-knowledge', () => {
+    if (!install.found || !install.root) {
+      return { me: [], memory: [], problem: install.problem ?? 'No AI-OS install found.' }
+    }
+    return readKnowledge(install.root)
+  })
+
+  ipcMain.handle('desk:read-doc', (_event, id: unknown) => {
+    if (typeof id !== 'string' || !install.root) return null
+    return readDoc(install.root, id)
+  })
+
+  ipcMain.handle('desk:get-skills', () => discoverSkills(install.root))
+
+  ipcMain.handle('desk:get-datapath', () => {
+    const harness = findHarness()
+    const selected = models.find((choice) => choice.id === chat?.modelId)
+    return describeDataPath({
+      modelLabel: selected?.label ?? null,
+      provider: selected?.provider ?? null,
+      local: selected?.local ?? false,
+      harnessFound: harness.found,
+      harnessPath: harness.path,
+      installRoot: install.root,
+    })
+  })
 
   // --- the conversation -----------------------------------------------------
 

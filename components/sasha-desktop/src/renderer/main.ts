@@ -3,12 +3,14 @@
  *
  * Two rules govern every line here:
  *
- *  1. NEVER innerHTML. Model output and staged drafts are untrusted-shaped text;
- *     treating either as markup is the injection this app must not have. Everything
- *     is createElement + textContent, and `audit:surface` fails the build if
- *     innerHTML appears anywhere in src/.
+ *  1. NEVER innerHTML. Model output, staged drafts, and now the user's own memory
+ *     files are untrusted-shaped text; treating any of it as markup is the injection
+ *     this app must not have. Everything is createElement + textContent, and
+ *     `audit:surface` fails the build if innerHTML appears anywhere in src/.
  *
  *  2. NO DECISION HAPPENS HERE. The page renders and asks; main decides and acts.
+ *     Sprint 2 adds three read-only panels and keeps that shape exactly: the only
+ *     things this page can cause are "send a message" and "read a file main listed".
  */
 
 export {}
@@ -35,6 +37,28 @@ interface ModelChoice {
   detail: string
   local: boolean
 }
+
+interface Doc {
+  id: string
+  name: string
+  folder: 'me' | 'memory'
+  bytes: number
+  modified: string
+  preview: string
+}
+interface Knowledge { me: Doc[]; memory: Doc[]; problem?: string }
+
+interface Skill {
+  name: string
+  description: string
+  source: 'install' | 'harness'
+  path: string
+  command?: string
+}
+
+type Direction = 'stays' | 'leaves' | 'unknown'
+interface Flow { what: string; direction: Direction; detail: string }
+interface DataPath { summary: string; flows: Flow[]; workspace?: string }
 
 type SessionEvent =
   | { kind: 'ready'; sessionId: string; model: string; tools: string[]; cwd: string }
@@ -65,6 +89,10 @@ interface SashaApi {
   refreshModels(): Promise<ModelChoice[]>
   send(text: string): Promise<boolean>
   interrupt(): Promise<boolean>
+  getKnowledge(): Promise<Knowledge>
+  readDoc(id: string): Promise<string | null>
+  getSkills(): Promise<Skill[]>
+  getDataPath(): Promise<DataPath>
   onItems(cb: (items: BellItem[]) => void): void
   onSettings(cb: (settings: Settings) => void): void
   onFocusItem(cb: (id: string) => void): void
@@ -87,10 +115,14 @@ const hintEl = document.getElementById('composer-hint') as HTMLElement
 const statusStrip = document.getElementById('status-strip') as HTMLElement
 const statusText = document.getElementById('status-text') as HTMLElement
 const statusDetail = document.getElementById('status-detail') as HTMLElement
-const bellDrawer = document.getElementById('bell-drawer') as HTMLElement
 const bellEl = document.getElementById('bell') as HTMLElement
-const bellToggle = document.getElementById('bell-toggle') as HTMLButtonElement
+const waitingBadge = document.getElementById('waiting-badge') as HTMLElement
 const refreshButton = document.getElementById('refresh') as HTMLButtonElement
+const viewTitle = document.getElementById('view-title') as HTMLElement
+const knowledgeEl = document.getElementById('knowledge') as HTMLElement
+const skillsEl = document.getElementById('skills') as HTMLElement
+const datapathEl = document.getElementById('datapath') as HTMLElement
+const dataSummaryEl = document.getElementById('data-summary') as HTMLElement
 
 // ---------------------------------------------------------------------------
 // DOM helpers — createElement + textContent, never markup.
@@ -116,6 +148,68 @@ function scrollIfPinned(): void {
   const nearBottom =
     transcriptEl.scrollHeight - transcriptEl.scrollTop - transcriptEl.clientHeight < 120
   if (nearBottom) transcriptEl.scrollTop = transcriptEl.scrollHeight
+}
+
+/** "3.2 KB" / "412 bytes" — size as a person reads it. */
+function humanBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** "today" / "3 days ago" — recency matters more than the timestamp. */
+function humanWhen(iso: string): string {
+  const then = Date.parse(iso)
+  if (Number.isNaN(then)) return ''
+  const days = Math.floor((Date.now() - then) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days} days ago`
+  if (days < 365) return `${Math.floor(days / 30)} months ago`
+  return `${Math.floor(days / 365)} years ago`
+}
+
+// ---------------------------------------------------------------------------
+// Views
+// ---------------------------------------------------------------------------
+
+type ViewName = 'chat' | 'waiting' | 'you' | 'skills' | 'data'
+
+const VIEW_TITLES: Record<ViewName, string> = {
+  chat: 'Chat',
+  waiting: 'Waiting for you',
+  you: 'What Sasha knows about you',
+  skills: 'What Sasha can do',
+  data: 'Where your data goes',
+}
+
+/** Panels load when first opened, not at boot: nobody waits on a tab they never click. */
+const loaded = new Set<ViewName>()
+
+function showView(view: ViewName): void {
+  for (const section of Array.from(document.querySelectorAll('.view'))) {
+    const isTarget = section.id === `view-${view}`
+    section.classList.toggle('is-active', isTarget)
+    ;(section as HTMLElement).hidden = !isTarget
+  }
+  for (const button of Array.from(document.querySelectorAll('.rail-item'))) {
+    button.classList.toggle('is-active', (button as HTMLElement).dataset.view === view)
+  }
+  viewTitle.textContent = VIEW_TITLES[view]
+
+  if (view === 'chat') inputEl.focus()
+  if (view === 'you' && !loaded.has('you')) void loadKnowledge()
+  if (view === 'skills' && !loaded.has('skills')) void loadSkills()
+  // The data panel is always re-derived: the answer depends on the model in use,
+  // and a stale privacy claim is worse than a slow one.
+  if (view === 'data') void loadDataPath()
+}
+
+for (const button of Array.from(document.querySelectorAll('.rail-item'))) {
+  button.addEventListener('click', () => {
+    const view = (button as HTMLElement).dataset.view as ViewName | undefined
+    if (view) showView(view)
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +361,23 @@ async function submit(): Promise<void> {
   if (!ok) setBusy(false)
 }
 
+/**
+ * Put text in the composer and go to the chat, WITHOUT sending it.
+ *
+ * This is the seam every panel uses to act. The stop-short is the point: a button in
+ * a side panel proposes the words, and the user reads them and presses Send. Nothing
+ * about your memory or your files changes because you clicked something in a list.
+ */
+function composeInChat(text: string, options: { send?: boolean } = {}): void {
+  showView('chat')
+  inputEl.value = text
+  resizeInput()
+  inputEl.focus()
+  // Put the caret at the end so typing continues the sentence rather than replacing it.
+  inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length)
+  if (options.send) void submit()
+}
+
 function resizeInput(): void {
   inputEl.style.height = 'auto'
   inputEl.style.height = `${Math.min(inputEl.scrollHeight, 200)}px`
@@ -350,15 +461,15 @@ modelSelect.addEventListener('change', () => {
 })
 
 // ---------------------------------------------------------------------------
-// The doorbell drawer
+// Waiting (the doorbell)
 // ---------------------------------------------------------------------------
 
 const expanded = new Set<string>()
 
 function renderBell(items: BellItem[]): void {
   clear(bellEl)
-  bellToggle.textContent = items.length === 0 ? 'Waiting' : `Waiting (${items.length})`
-  bellToggle.classList.toggle('has-items', items.length > 0)
+  waitingBadge.textContent = String(items.length)
+  waitingBadge.hidden = items.length === 0
 
   if (items.length === 0) {
     bellEl.appendChild(el('p', 'muted small', 'Nothing needs you right now.'))
@@ -405,19 +516,198 @@ function renderBell(items: BellItem[]): void {
   }
 }
 
-bellToggle.addEventListener('click', () => {
-  bellDrawer.hidden = !bellDrawer.hidden
-})
 refreshButton.addEventListener('click', () => void sasha.refresh().then(renderBell))
+
+// ---------------------------------------------------------------------------
+// What Sasha knows about you
+// ---------------------------------------------------------------------------
+
+const openDocs = new Set<string>()
+
+function renderDocGroup(
+  parent: HTMLElement,
+  title: string,
+  blurb: string,
+  docs: Doc[],
+  emptyLine: string,
+): void {
+  const group = el('section', 'doc-group')
+  group.appendChild(el('h3', undefined, title))
+  group.appendChild(el('p', 'muted small', blurb))
+
+  if (docs.length === 0) {
+    group.appendChild(el('p', 'empty-line', emptyLine))
+    parent.appendChild(group)
+    return
+  }
+
+  for (const doc of docs) {
+    const row = el('article', 'doc')
+
+    const head = el('button', 'doc-head')
+    head.appendChild(el('span', 'doc-name', doc.name))
+    head.appendChild(el('span', 'doc-meta', `${humanBytes(doc.bytes)} · changed ${humanWhen(doc.modified)}`))
+    if (doc.preview) head.appendChild(el('span', 'doc-preview', doc.preview))
+    head.addEventListener('click', () => {
+      if (openDocs.has(doc.id)) openDocs.delete(doc.id)
+      else openDocs.add(doc.id)
+      void loadKnowledge()
+    })
+    row.appendChild(head)
+
+    if (openDocs.has(doc.id)) {
+      const body = el('pre', 'doc-body', 'Reading…')
+      row.appendChild(body)
+      void sasha.readDoc(doc.id).then((text) => {
+        body.textContent = text ?? 'That file could not be read — it may have moved.'
+      })
+
+      const actions = el('div', 'card-actions')
+      // The ONLY way this panel changes anything: it writes a sentence into the
+      // composer and stops. Sasha makes the change in the conversation, under the
+      // install's own rules about what is worth remembering — this window never
+      // becomes a second, ungoverned writer of your memory.
+      const change = el('button', 'ghost small-btn', 'Ask Sasha to change this')
+      change.addEventListener('click', () => {
+        composeInChat(`In ${doc.id}, I'd like to change `)
+      })
+      actions.appendChild(change)
+      row.appendChild(actions)
+    }
+
+    group.appendChild(row)
+  }
+  parent.appendChild(group)
+}
+
+async function loadKnowledge(): Promise<void> {
+  loaded.add('you')
+  const knowledge = await sasha.getKnowledge()
+  clear(knowledgeEl)
+
+  if (knowledge.problem) {
+    knowledgeEl.appendChild(el('p', 'notice system', knowledge.problem))
+  }
+
+  renderDocGroup(
+    knowledgeEl,
+    'Things you told it',
+    'Your me/ folder — who you are, what you are working on, how you want to be talked to.',
+    knowledge.me,
+    'Nothing here yet. Tell Sasha about yourself in the chat and it will start writing this.',
+  )
+  renderDocGroup(
+    knowledgeEl,
+    'Things it learned',
+    'Its memory — lessons it kept from working with you, so you do not have to repeat yourself.',
+    knowledge.memory,
+    'Nothing here yet. Memory fills in as you correct it and work together.',
+  )
+}
+
+const knowledgeRefresh = document.getElementById('knowledge-refresh') as HTMLButtonElement
+knowledgeRefresh.addEventListener('click', () => void loadKnowledge())
+
+// ---------------------------------------------------------------------------
+// What Sasha can do
+// ---------------------------------------------------------------------------
+
+async function loadSkills(): Promise<void> {
+  loaded.add('skills')
+  const skills = await sasha.getSkills()
+  clear(skillsEl)
+
+  if (skills.length === 0) {
+    skillsEl.appendChild(
+      el(
+        'p',
+        'empty-line',
+        'No skills found on this machine yet. Skills are folders with a SKILL.md in ' +
+          'them — your AI-OS install adds some, and you can add your own.',
+      ),
+    )
+    return
+  }
+
+  for (const skill of skills) {
+    const card = el('article', 'skill')
+
+    const head = el('div', 'skill-head')
+    head.appendChild(el('h3', undefined, `/${skill.name}`))
+    head.appendChild(
+      el('span', `chip ${skill.source}`, skill.source === 'install' ? 'from your install' : 'from Claude Code'),
+    )
+    card.appendChild(head)
+
+    if (skill.description) card.appendChild(el('p', 'skill-desc', skill.description))
+
+    const actions = el('div', 'card-actions')
+    const run = el('button', 'primary small-btn', 'Run')
+    // Straight into the chat as a normal message, so the run is visible, interruptible
+    // and permission-gated exactly like anything else you type. A button that ran a
+    // skill invisibly would be a second, quieter way to act on the user's machine.
+    run.addEventListener('click', () => composeInChat(`/${skill.name}`, { send: true }))
+    actions.appendChild(run)
+
+    const prefill = el('button', 'ghost small-btn', 'Type it out')
+    prefill.addEventListener('click', () => composeInChat(`/${skill.name} `))
+    actions.appendChild(prefill)
+    card.appendChild(actions)
+
+    if (skill.command) {
+      // The capability without us: the same work, from a terminal, with no GUI and no
+      // harness. Shown because a personal AI you cannot run without its app is not
+      // really yours.
+      const footer = el('div', 'skill-cli')
+      footer.appendChild(el('span', 'muted small', 'Also runs on its own:'))
+      footer.appendChild(el('code', undefined, skill.command))
+      card.appendChild(footer)
+    }
+
+    skillsEl.appendChild(card)
+  }
+}
+
+const skillsRefresh = document.getElementById('skills-refresh') as HTMLButtonElement
+skillsRefresh.addEventListener('click', () => void loadSkills())
+
+// ---------------------------------------------------------------------------
+// Where your data goes
+// ---------------------------------------------------------------------------
+
+const DIRECTION_LABEL: Record<Direction, string> = {
+  stays: 'stays here',
+  leaves: 'leaves this machine',
+  unknown: 'nothing running',
+}
+
+async function loadDataPath(): Promise<void> {
+  loaded.add('data')
+  const path = await sasha.getDataPath()
+  dataSummaryEl.textContent = path.summary
+  clear(datapathEl)
+
+  for (const flow of path.flows) {
+    const row = el('article', `flow ${flow.direction}`)
+    const head = el('div', 'flow-head')
+    head.appendChild(el('h3', undefined, flow.what))
+    head.appendChild(el('span', `chip ${flow.direction}`, DIRECTION_LABEL[flow.direction]))
+    row.appendChild(head)
+    row.appendChild(el('p', 'flow-detail', flow.detail))
+    datapathEl.appendChild(row)
+  }
+
+  if (path.workspace) {
+    datapathEl.appendChild(el('p', 'muted small', `Workspace: ${path.workspace}`))
+  }
+}
+
+const dataRefresh = document.getElementById('data-refresh') as HTMLButtonElement
+dataRefresh.addEventListener('click', () => void loadDataPath())
 
 // ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
-
-function shortenPath(path: string): string {
-  const match = /^(\/(?:home|Users)\/[^/]+)(\/.*)?$/.exec(path)
-  return match ? `~${match[2] ?? ''}` : path
-}
 
 function renderStatus(install: InstallState, harness: HarnessState): void {
   if (install.found && harness.found) {
@@ -431,8 +721,7 @@ function renderStatus(install: InstallState, harness: HarnessState): void {
     statusDetail.textContent = install.problem ?? ''
   } else {
     statusText.textContent = 'Claude Code not found'
-    statusDetail.textContent =
-      (harness.problem ?? '') + ' Local models still work if Ollama is running.'
+    statusDetail.textContent = harness.problem ?? ''
   }
 }
 
@@ -475,6 +764,8 @@ sasha.onSession((event) => {
 
 sasha.onModels((payload) => renderModels(payload.models, payload.selected))
 sasha.onItems((items) => renderBell(items))
+// A notification click means "show me that one" — land on the card, not the chat.
+sasha.onFocusItem(() => showView('waiting'))
 
 async function boot(): Promise<void> {
   const [install, harness, items, models, selected] = await Promise.all([

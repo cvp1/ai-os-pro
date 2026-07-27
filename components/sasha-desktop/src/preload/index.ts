@@ -25,6 +25,15 @@ const api = {
   refresh: () => ipcRenderer.invoke('desk:refresh'),
   runDoctor: () => ipcRenderer.invoke('desk:run-doctor'),
 
+  // What Sasha knows / can do / sends. All read-only: note there is no writeDoc,
+  // no saveMemory, no runSkill-that-executes. Changing what Sasha remembers goes
+  // through the conversation, and running a skill goes through `send` — so it lands
+  // in the transcript where you can see what it did.
+  getKnowledge: () => ipcRenderer.invoke('desk:get-knowledge'),
+  readDoc: (id: string) => ipcRenderer.invoke('desk:read-doc', id),
+  getSkills: () => ipcRenderer.invoke('desk:get-skills'),
+  getDataPath: () => ipcRenderer.invoke('desk:get-datapath'),
+
   // The conversation.
   getModels: () => ipcRenderer.invoke('desk:get-models'),
   getModel: () => ipcRenderer.invoke('desk:get-model'),

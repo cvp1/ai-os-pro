@@ -18,6 +18,23 @@ your AI-OS workspace, with your memory, your skills, and your files.
 **You choose which Claude answers.** A model picker sits in the header: Fable,
 Opus, Sonnet or Haiku, through the Claude Code login you already have.
 
+**You can see what it knows about you.** Your `me/` and `memory/` files, listed and
+readable in the window — the things you told it and the things it learned. This is
+the difference between a personal AI and a chat box, and it is only a real claim if
+you can look. The panel is **read-only on purpose**: changing what Sasha remembers
+happens by asking Sasha, in the conversation, where the install's own rules about
+what is worth keeping still apply. A GUI that wrote memory directly would be a
+second writer with none of those gates.
+
+**You can see what it can do.** Every skill on the machine, discovered rather than
+hardcoded, with a Run button that puts the command in the chat where you can watch
+it work. Where a skill dispatches to a tool, the panel shows that command line too —
+the capability keeps working with no GUI, no harness, and no us.
+
+**You can see where your data goes.** One panel, derived from live state, that says
+plainly what leaves this machine and what does not. When you are talking to a cloud
+model it says so first, in those words, above the reassuring rows.
+
 **Local models: not here — and here is the honest record.** For two days this app
 carried an Anthropic→Ollama bridge so Claude Code could drive a local model with
 its full system prompt, tools, skills and memory. It worked mechanically (eleven
@@ -93,6 +110,11 @@ the easiest place in the world to quietly erode that. So:
   card, because a decision should require seeing the thing you are deciding about.
 - Waving something off is remembered **forever** — dismissed once is dismissed for
   good, keyed on the file's path so editing a draft cannot resurrect it.
+- **The side panels cannot act.** They read. The one thing they can do is write a
+  sentence into the composer and stop — you read it and press Send. Nothing about
+  your memory, your files, or your machine changes because you clicked a row in a
+  list. There is no `writeDoc` on the bridge; look at `src/preload/index.ts`, that
+  list is the whole surface.
 
 ## The bell's manners
 
@@ -167,7 +189,8 @@ that is what the environment variable is for.
 ```
 src/main/           the only privileged code
   session/          the conversation: neutral protocol + one adapter per provider
-  aios/             find the install, find the harness, run /doctor
+  aios/             find the install and harness, run /doctor, read me/ + memory/,
+                    discover skills, describe where the data goes — all read-only
   doorbell/         proposals, heartbeats, dismissal memory, the counter
 src/preload/        the complete list of things the page may do
 src/renderer/       the window — createElement + textContent, never innerHTML

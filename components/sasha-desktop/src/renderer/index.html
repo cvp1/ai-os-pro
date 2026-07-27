@@ -15,50 +15,113 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="masthead">
+    <!--
+      The rail is the answer to "what is this thing?". A chat box alone teaches a
+      novice nothing about what they own; four named places do. Everything behind
+      them is read-only except the conversation itself.
+    -->
+    <nav class="rail" aria-label="Sections">
       <div class="wordmark">
         <h1>Sasha</h1>
         <!-- D53: Sasha never ships bare. The function tagline rides every surface. -->
-        <p class="tagline">a personal AI that is yours — your files, your models, your machine</p>
+        <p class="tagline">a personal AI that is yours</p>
       </div>
-      <div class="masthead-actions">
+      <button type="button" class="rail-item is-active" data-view="chat">
+        <span class="rail-label">Chat</span>
+      </button>
+      <button type="button" class="rail-item" data-view="waiting">
+        <span class="rail-label">Waiting</span>
+        <span id="waiting-badge" class="badge" hidden></span>
+      </button>
+      <button type="button" class="rail-item" data-view="you">
+        <span class="rail-label">What Sasha knows</span>
+      </button>
+      <button type="button" class="rail-item" data-view="skills">
+        <span class="rail-label">What it can do</span>
+      </button>
+      <button type="button" class="rail-item" data-view="data">
+        <span class="rail-label">Where your data goes</span>
+      </button>
+    </nav>
+
+    <div class="stage">
+      <header class="masthead">
+        <p id="view-title" class="view-title">Chat</p>
         <label class="model-picker">
           <span class="model-label">Model</span>
           <select id="model-select"></select>
         </label>
-        <button id="bell-toggle" type="button" class="ghost">Waiting</button>
-      </div>
-    </header>
+      </header>
 
-    <section id="status-strip" class="status-strip" hidden>
-      <p id="status-text"></p>
-      <p id="status-detail" class="muted"></p>
-    </section>
+      <section id="status-strip" class="status-strip" hidden>
+        <p id="status-text"></p>
+        <p id="status-detail" class="muted"></p>
+      </section>
 
-    <!-- The doorbell, demoted to a drawer: it matters, but it is not the product. -->
-    <section id="bell-drawer" class="bell-drawer" hidden>
-      <div class="drawer-head">
-        <h2>Waiting for you</h2>
-        <button id="refresh" type="button" class="ghost small-btn">Check now</button>
-      </div>
-      <div id="bell" class="bell"></div>
-    </section>
+      <!-- Chat ------------------------------------------------------------- -->
+      <section id="view-chat" class="view is-active">
+        <main id="transcript" class="transcript"></main>
+        <footer class="composer">
+          <div class="composer-row">
+            <textarea
+              id="input"
+              rows="1"
+              placeholder="Ask Sasha anything, or type / for a command…"
+              autofocus
+            ></textarea>
+            <button id="send" type="button" class="primary">Send</button>
+            <button id="stop" type="button" class="ghost" hidden>Stop</button>
+          </div>
+          <p id="composer-hint" class="muted small"></p>
+        </footer>
+      </section>
 
-    <main id="transcript" class="transcript"></main>
+      <!-- Waiting ---------------------------------------------------------- -->
+      <section id="view-waiting" class="view scroller" hidden>
+        <div class="view-head">
+          <h2>Waiting for you</h2>
+          <button id="refresh" type="button" class="ghost small-btn">Check now</button>
+        </div>
+        <div id="bell" class="bell"></div>
+      </section>
 
-    <footer class="composer">
-      <div class="composer-row">
-        <textarea
-          id="input"
-          rows="1"
-          placeholder="Ask Sasha anything, or type / for a command…"
-          autofocus
-        ></textarea>
-        <button id="send" type="button" class="primary">Send</button>
-        <button id="stop" type="button" class="ghost" hidden>Stop</button>
-      </div>
-      <p id="composer-hint" class="muted small"></p>
-    </footer>
+      <!-- What Sasha knows -------------------------------------------------- -->
+      <section id="view-you" class="view scroller" hidden>
+        <div class="view-head">
+          <h2>What Sasha knows about you</h2>
+          <button id="knowledge-refresh" type="button" class="ghost small-btn">Reload</button>
+        </div>
+        <p class="lede">
+          Everything here is a plain file on your own disk. Sasha reads these to know
+          who you are and how you like to work — you can read them too, and nothing in
+          this window can change them.
+        </p>
+        <div id="knowledge" class="knowledge"></div>
+      </section>
+
+      <!-- What it can do ---------------------------------------------------- -->
+      <section id="view-skills" class="view scroller" hidden>
+        <div class="view-head">
+          <h2>What Sasha can do</h2>
+          <button id="skills-refresh" type="button" class="ghost small-btn">Reload</button>
+        </div>
+        <p class="lede">
+          Skills found on this machine. Run one and it happens in the chat, where you
+          can watch what it does.
+        </p>
+        <div id="skills" class="skills"></div>
+      </section>
+
+      <!-- Where your data goes ---------------------------------------------- -->
+      <section id="view-data" class="view scroller" hidden>
+        <div class="view-head">
+          <h2>Where your data goes</h2>
+          <button id="data-refresh" type="button" class="ghost small-btn">Recheck</button>
+        </div>
+        <p id="data-summary" class="data-summary"></p>
+        <div id="datapath" class="datapath"></div>
+      </section>
+    </div>
 
     <script type="module" src="./main.js"></script>
   </body>
