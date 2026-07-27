@@ -93,9 +93,9 @@ export class SessionManager {
         kind: 'status',
         text:
           `${label} runs on your own hardware — but it is not Sasha: no skills, no ` +
-          'memory, no AI-OS instructions. It CAN read and change files in your ' +
-          'workspace, with less asking than a Claude session does, so give it careful ' +
-          'instructions. Small local models are also wrong more often.',
+          'memory, no AI-OS instructions. It can read and search your files; it cannot ' +
+          'change them. Small local models are also wrong more often, so check anything ' +
+          'that matters.',
       })
       return
     }

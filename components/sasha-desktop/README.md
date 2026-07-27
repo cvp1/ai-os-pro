@@ -55,17 +55,26 @@ only the flattering one:
 - **It is not Sasha.** No skills, no memory, no AI-OS instructions — opencode reads
   its own context files, not Claude Code's. It is a capable agent on your machine,
   which is a different product from your personal AI.
-- **It can change files, with less asking than a Claude session.** A read-only
-  posture was attempted four ways (permission-deny, two agent configs, the built-in
-  `plan` agent) and *every one hung the binary* — measured, with timings recorded in
-  `src/main/session/opencode-backend.ts`. Shipping the configuration that works and
-  disclosing what it means beat shipping a window that freezes. Tightening it is open
-  follow-on work, and those four dead ends are written down so the next attempt starts
-  from evidence.
-- **It is slower and wronger.** Answers arrive all at once rather than word by word
-  (`opencode run --format json` buffers until exit — measured, not assumed), so a
-  turn can be a minute or more of silence; the app says so while you wait. And a
-  4B-class model completes roughly half of five-step agentic tasks on this fleet.
+- **It can read your files. It cannot change them.** Deliberately narrower than the
+  Claude session: the generated config denies the mutating tools, and it is verified
+  live rather than asserted — asked to create a file, the model's write and bash
+  attempts come back `invalid` and no file appears; asked to read one, it reads it and
+  answers.
+- **It is wronger, and it answers all at once.** A 4B-class model completes roughly
+  half of five-step agentic tasks on this fleet — in one capture it grepped a file
+  reading "four horses" and answered "One". Text also arrives in one block rather than
+  streaming word by word, so a turn is quiet while it works; the app says so instead
+  of looking frozen, and a three-minute timeout hands your window back if a small
+  model gets stuck in a tool loop.
+
+One process detail worth recording, because it cost hours and would have shipped a
+false conclusion. The read-only posture above was *first* written off as impossible:
+four config shapes each appeared to hang for 300–400 seconds with zero output, and the
+picker was rewritten to admit that local sessions can write. Every one of those
+measurements was invalid — they shared a broken rig (this app handed the child an open
+stdin pipe it sat reading forever, and the CLI probes redirected stdout to a file).
+With the rig fixed, the same config works in seconds and writes really are blocked.
+Four consistent failures through one instrument is one observation, not four.
 
 Needs Ollama plus opencode. Missing either one is explained in the picker with the
 one thing to install, never a silently shorter menu. A remote Ollama works via

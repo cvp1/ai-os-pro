@@ -84,17 +84,24 @@ test('local models alone are enough to use the app', () => {
 })
 
 /**
- * The disclosure test. A read-only local posture was attempted four ways and every
- * one hung the binary, so the shipped session CAN write — and the picker has to say
- * the true thing rather than the intended one. If someone later lands a real
- * read-only mode, this test should fail and be updated deliberately; that is the
- * point of pinning it.
+ * The disclosure test — and a small monument to a near-miss.
+ *
+ * This assertion was briefly INVERTED. A read-only posture appeared to fail four
+ * different ways, so the picker was rewritten to admit that local sessions can write,
+ * and this test was rewritten to demand that admission. All four measurements were
+ * taken through a broken rig (an open stdin pipe the child sat reading forever); with
+ * that fixed, the permission config works and writes really are blocked — verified
+ * live: write/bash return `invalid`, no file appears, reads still work.
+ *
+ * So it asserts read-only again, on evidence this time. If a future change makes local
+ * sessions able to write, this test should fail loudly and be flipped deliberately —
+ * never quietly, and never on a single instrument's word.
  */
-test('the local detail line discloses that the model can CHANGE files', () => {
+test('the local detail line promises reading and not writing', () => {
   const local = localModels(READY)[0]
   assert.match(local.detail, /own hardware/i)
-  assert.match(local.detail, /change files/i)
-  assert.doesNotMatch(local.detail, /cannot change|read-only/i)
+  assert.match(local.detail, /reads your files/i)
+  assert.match(local.detail, /cannot change/i)
 })
 
 test('a remembered local model is restored; the default otherwise prefers Sonnet', () => {

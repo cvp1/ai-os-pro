@@ -125,8 +125,8 @@ export function describeDataPath(inputs: DataPathInputs): DataPath {
         `Sasha works inside ${inputs.installRoot} and can read and change files there ` +
         'when you ask it to. ' +
         (inputs.local
-          ? 'A local model asks less before changing a file than a Claude session ' +
-            'does, so be specific with it. Nothing is uploaded to any company.'
+          ? 'A local model can read them but cannot change them at all. Nothing is ' +
+            'uploaded to any company.'
           : !inputs.harnessFound
             ? 'Nothing is uploaded.'
             : 'Anything it reads in order to answer you becomes part of what is sent to ' +

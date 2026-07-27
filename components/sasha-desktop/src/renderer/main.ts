@@ -482,10 +482,10 @@ function updateHint(models: ModelChoice[], selected: string | null): void {
     // are not flattering. A user who picks this deserves to know it is a different,
     // smaller thing than Sasha — before they judge Sasha by it.
     hintEl.textContent =
-      `${model.label} runs on your own hardware through opencode. It has no skills, ` +
-      'no memory and no AI-OS instructions, so it is not Sasha — and it can read AND ' +
-      'change files in your workspace with less asking than a Claude session. Small ' +
-      'models are wrong more often; check anything that matters.'
+      `${model.label} runs on your own hardware through opencode. It can read and ` +
+      'search your files but cannot change them — and it has no skills, no memory and ' +
+      'no AI-OS instructions, so it is not Sasha. Small models are wrong more often; ' +
+      'check anything that matters.'
     return
   }
   hintEl.textContent = `${model.label} · ${model.detail}`

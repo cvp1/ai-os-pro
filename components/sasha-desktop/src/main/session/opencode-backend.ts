@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { writeFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -35,8 +35,20 @@ import type { Backend, SessionEvent } from './protocol.js'
  *     horses" and answered "One". That is the tier, not a bug, and the user is told.
  */
 
-/** One turn is one process; a wedged model must not hold the app forever. */
-const TURN_TIMEOUT_MS = 10 * 60_000
+/**
+ * One turn is one process, and it gets three minutes.
+ *
+ * Measured on this fleet, same model and machine, "what is 2+2": straight to Ollama's
+ * endpoint answers in 0.6 s; through `opencode run` with its full scaffold (~11.5k
+ * input tokens of system prompt and tool schemas) it is seconds, and a tool-using turn
+ * is tens of seconds. Three minutes is generous for that and short enough to fail
+ * honestly rather than leave someone staring at a window that looks broken.
+ *
+ * It is deliberately NOT ten minutes any more. The earlier ten-minute value was set to
+ * accommodate "hangs" that turned out to be this file's own bug (see the stdin note in
+ * `start`), and a timeout chosen to tolerate a defect keeps the defect comfortable.
+ */
+const TURN_TIMEOUT_MS = 3 * 60_000
 /** Tool output can be enormous; the transcript row only needs a line. */
 const SUMMARY_CHARS = 120
 
@@ -56,7 +68,7 @@ export class OpencodeBackend implements Backend {
   readonly id = 'opencode'
   readonly label: string
 
-  private child: ChildProcessWithoutNullStreams | null = null
+  private child: import('node:child_process').ChildProcess | null = null
   private buffer = ''
   private listeners: ((event: SessionEvent) => void)[] = []
   private sessionId: string | null = null
@@ -87,32 +99,26 @@ export class OpencodeBackend implements Backend {
    *    user thinks is a private local session. Structural, not a flag someone can
    *    forget: the caller never builds this.
    *
-   *  · Nothing else. In particular NO permission or agent block — see below.
+   *  · The permission block. Headless opencode denies every tool unless `--auto` is
+   *    passed, and `--auto` on its own auto-approves everything — looser than the
+   *    Claude side's `acceptEdits`, which would mean a GUI quietly handing the user
+   *    weaker guardrails than the terminal gives them. Denying the mutating tools
+   *    explicitly, and letting `--auto` cover only what is left, lands on: A LOCAL
+   *    SESSION MAY READ YOUR WORKSPACE AND MAY NOT CHANGE IT. Narrower than the
+   *    Claude session on purpose.
    *
-   * WHY THERE IS NO READ-ONLY POSTURE HERE (measured, 2026-07-27).
+   *    Verified live, gemma4-e4b, 2026-07-27: asked to create a file, the model's
+   *    write and bash attempts came back `invalid` and no file appeared; asked to read
+   *    one, `read` ran and it answered from the contents. Both runs exited cleanly.
    *
-   * The intent was for a local session to be NARROWER than the Claude one: read your
-   * files, change nothing. Headless opencode denies every tool unless `--auto` is
-   * passed, and `--auto` auto-approves everything, so the constraint had to come from
-   * config. Four shapes were tried live against gemma4-e4b on this fleet:
-   *
-   *   1. `permission: {edit|write|bash|webfetch: "deny"}`  → 400 s, ZERO bytes, killed
-   *   2. `agent: {custom, tools:{write:false,…}}` + a write ask → 300 s, zero, killed
-   *   3. the same custom agent + a pure READ ask              → 280 s, zero, killed
-   *   4. the built-in `--agent plan`                          → 280 s, zero, killed
-   *
-   * The plain config with `--auto` answers the same class of question in ~130 s, and
-   * (3) is the one that settles it: a config carrying an agent block hangs even on a
-   * question that needs no restricted tool, so the hang is the config, not the model
-   * refusing. Rather than ship a window that freezes for minutes, this ships the ONE
-   * configuration observed to work end to end — and tells the user plainly what that
-   * means, which is the part that keeps it honest:
-   *
-   *   A LOCAL SESSION CAN CHANGE FILES IN THE WORKSPACE. That is looser than the
-   *   Claude side's `acceptEdits`, and the picker, the switch notice and the data
-   *   panel all say so in those words. Disclosed is not the same as fixed; tightening
-   *   this is real follow-on work, and the four dead ends above are recorded so the
-   *   next attempt starts from evidence instead of re-running them.
+   * A NOTE ON HOW NEARLY THIS WENT WRONG, because the lesson generalises. Four
+   * attempts at this posture were first recorded as dead ends — permission-deny and
+   * three agent variants, each "hanging" for 300-400 s with zero output — and the
+   * plan was to ship without it and disclose that local sessions can write. Every one
+   * of those measurements was invalid: they shared a broken harness (an open stdin
+   * pipe, and stdout redirected to a file), so they were measuring the rig, not the
+   * config. The same permission block, run through a pipe, works in seconds. Four
+   * consistent failures through one instrument is one observation, not four.
    */
   private writeConfig(): string {
     if (this.configPath) return this.configPath
@@ -131,15 +137,17 @@ export class OpencodeBackend implements Backend {
             models: { [model]: { name: model } },
           },
         },
-        // No `permission` and no `agent` key: both hang this binary (see above).
         mcp: {},
+        // Read, do not change. Verified live (see the note above): write/bash come
+        // back `invalid`, read works.
+        permission: { edit: 'deny', write: 'deny', bash: 'deny', webfetch: 'deny' },
       }),
     )
     this.configPath = path
     return path
   }
 
-  private start(text: string): ChildProcessWithoutNullStreams {
+  private start(text: string): void {
     const args = ['run', '--format', 'json', '--auto', '-m', this.options.model]
     // Continue the conversation rather than starting fresh every message. Without
     // this the second turn has no memory of the first and the window would be lying
@@ -149,8 +157,13 @@ export class OpencodeBackend implements Backend {
 
     const child = spawn(this.options.binary, args, {
       cwd: this.options.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, OPENCODE_CONFIG: this.writeConfig() },
+      // stdin is 'ignore', NOT a pipe. The message goes on the command line, so this
+      // process has no stdin to give — and handing it an open pipe we never write to
+      // or close invites the child to sit there reading it forever. A CLI that accepts
+      // piped input has every reason to wait when stdin is an open pipe rather than a
+      // terminal, and "waits forever" is exactly the symptom this cost hours of.
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: childEnv({ OPENCODE_CONFIG: this.writeConfig() }),
     })
     this.child = child
 
@@ -190,13 +203,14 @@ export class OpencodeBackend implements Backend {
       this.emit({
         kind: 'error',
         message:
-          'The local model did not finish within ten minutes and was stopped. Small ' +
-          'models can stall on long tool chains; try a simpler ask or a Claude model.',
+          'The local model did not answer within three minutes, so it was stopped and ' +
+          'your window is yours again. Small models can loop on a long chain of tool ' +
+          'calls; try a simpler ask, or use a Claude model for this one.',
       })
       this.child?.kill('SIGTERM')
     }, TURN_TIMEOUT_MS)
 
-    return child
+
   }
 
   private clearTimer(): void {
@@ -324,6 +338,43 @@ export class OpencodeBackend implements Backend {
     this.child.kill('SIGTERM')
     this.child = null
   }
+}
+
+/**
+ * A curated environment for the child, instead of Electron's.
+ *
+ * MEASURED, and the reason this function exists: the identical opencode command, same
+ * cwd and same generated config, answers "4" in about four seconds when run from a
+ * shell — and produced NOTHING for 150 seconds when spawned from inside Electron with
+ * `{...process.env}`. Same binary, same model, same machine. The only difference was
+ * the environment it inherited.
+ *
+ * An Electron main process carries a large amount of Chromium and Node machinery in
+ * its env, and a foreign runtime (opencode ships as a compiled bun binary) has no
+ * business inheriting any of it. Rather than bisect a moving target — the offending
+ * variable may well change with the next Electron — this passes an explicit, small
+ * set and drops everything else. A child process should get what it needs, not
+ * whatever happened to be lying around.
+ *
+ * The allowlist is deliberately boring: where the user is (HOME, USER), how to find
+ * binaries (PATH, SHELL), how to render text (LANG, LC_ALL, TERM), where app state
+ * lives (XDG_*), and the two things that steer the model (OLLAMA_HOST, and the config
+ * path we pass in). Something missing here shows up as a clear failure in the
+ * transcript, which is the right direction to fail in.
+ */
+function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
+  const KEEP = [
+    'HOME', 'USER', 'LOGNAME', 'PATH', 'SHELL', 'TMPDIR',
+    'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM',
+    'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME',
+    'OLLAMA_HOST', 'SSL_CERT_FILE', 'SSL_CERT_DIR',
+  ]
+  const env: NodeJS.ProcessEnv = {}
+  for (const key of KEEP) {
+    const value = process.env[key]
+    if (typeof value === 'string' && value !== '') env[key] = value
+  }
+  return { ...env, ...extra }
 }
 
 /** One readable line about what a tool is being asked to do. */

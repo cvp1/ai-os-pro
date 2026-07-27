@@ -108,7 +108,7 @@ test('a local model IS offered once the machine can run one', async () => {
   assert.equal(local[0].provider, 'ollama')
 })
 
-test('switching to a local model warns that it is not Sasha and can change files', async () => {
+test('switching to a local model warns it is not Sasha and cannot change files', async () => {
   const manager = new SessionManager(undefined, '/tmp', 'acceptEdits', {
     ready: true,
     opencodePath: '/bin/true',
@@ -123,7 +123,7 @@ test('switching to a local model warns that it is not Sasha and can change files
   const status = events.find((e) => e.kind === 'status')
   assert.ok(status, 'the difference must be stated at the moment of switching')
   assert.match(status.text, /not Sasha/i)
-  assert.match(status.text, /change files/i)
+  assert.match(status.text, /cannot change/i)
   manager.close()
 })
 

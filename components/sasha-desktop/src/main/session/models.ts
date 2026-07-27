@@ -49,11 +49,10 @@ export function localModels(local: LocalState): ModelChoice[] {
     id: `ollama:${tag}`,
     label: `${prettyLocal(tag)} (local)`,
     provider: 'ollama' as const,
-    // Says "can change" rather than "reads only" because that is the truth of the
-    // configuration that actually runs — a read-only posture was attempted four ways
-    // and every one hung the binary (opencode-backend.ts records the shapes). The
-    // picker must describe the session the user is about to get, not the one intended.
-    detail: 'Runs on your own hardware · can read and change files in your workspace',
+    // Verified, not aspirational: the generated config denies the mutating tools and
+    // a live run confirmed write/bash come back `invalid` while read works. The picker
+    // describes the session the user actually gets.
+    detail: 'Runs on your own hardware · reads your files, cannot change them',
     local: true,
   }))
 }
