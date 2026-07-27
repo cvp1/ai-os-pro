@@ -29,6 +29,8 @@ const api = {
   // no saveMemory, no runSkill-that-executes. Changing what Sasha remembers goes
   // through the conversation, and running a skill goes through `send` — so it lands
   // in the transcript where you can see what it did.
+  getLocal: () => ipcRenderer.invoke('desk:get-local'),
+  refreshLocal: () => ipcRenderer.invoke('desk:refresh-local'),
   getKnowledge: () => ipcRenderer.invoke('desk:get-knowledge'),
   readDoc: (id: string) => ipcRenderer.invoke('desk:read-doc', id),
   getSkills: () => ipcRenderer.invoke('desk:get-skills'),
@@ -48,6 +50,10 @@ const api = {
   },
   onModels: (callback: (payload: unknown) => void) => {
     ipcRenderer.on('desk:models', (_event, payload) => callback(payload))
+  },
+  /** Local availability lands after the window opens; the picker updates in place. */
+  onLocal: (callback: (payload: unknown) => void) => {
+    ipcRenderer.on('desk:local', (_event, payload) => callback(payload))
   },
 
   /** Main pushes a fresh item list after every scan. */

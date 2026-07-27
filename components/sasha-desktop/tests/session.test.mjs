@@ -63,28 +63,68 @@ test('with nothing available the answer is null, not a guess', () => {
 })
 
 // ---------------------------------------------------------------------------
-// The gate that removed local models (2026-07-27) must STAY removed until a new
-// gate passes: selecting an ollama: id is refused with a pointer to opencode.
+// SUPERSEDED, ON PURPOSE (v0.4 → v0.5).
+//
+// Two tests lived here asserting the OPPOSITE of what follows: that selecting a local
+// model was refused with the bridge's gate story, and that no local model was ever
+// listed. Both were correct for v0.4, when the only local path was a bridge we wrote
+// that had failed its pre-stated gate and been deleted.
+//
+// They are replaced rather than quietly dropped, so the reversal stays legible: local
+// models returned in v0.5 through opencode — a spawned binary, not a protocol we
+// translate — after the control run showed the 1/2 failure belonged to the model tier
+// rather than the transport. The bridge is still deleted; what changed is that there
+// is now a second engine, so "refused" stopped being the honest answer.
 // ---------------------------------------------------------------------------
 
 import { SessionManager } from '../out/main/session/manager.js'
 
-test('selecting a local model is refused with the gate story, not half-served', async () => {
-  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits')
+test('selecting a local model the machine cannot run explains why, with the fix', async () => {
+  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits', {
+    ready: false,
+    ollamaUrl: 'http://127.0.0.1:11434',
+    models: [],
+    problem: 'Ollama is here, but opencode is not — install it from opencode.ai.',
+  })
   const events = []
   manager.onEvent((e) => events.push(e))
   await manager.select('ollama:gemma4-e4b-agent-64k:latest', [])
   const error = events.find((e) => e.kind === 'error')
   assert.ok(error, 'the user must be told')
-  assert.match(error.message, /gate/i)
-  assert.match(error.message, /opencode/)
+  // The discovered reason, carrying the next step — not a generic refusal.
+  assert.match(error.message, /opencode\.ai/)
 })
 
-test('no local models are ever listed', async () => {
+test('a local model IS offered once the machine can run one', async () => {
   const { availableModels } = await import('../out/main/session/models.js')
-  const models = await availableModels(true)
-  assert.ok(models.length > 0)
-  assert.equal(models.filter((m) => m.provider !== 'claude').length, 0)
+  const models = availableModels(true, {
+    ready: true,
+    opencodePath: '/usr/bin/opencode',
+    ollamaUrl: 'http://127.0.0.1:11434',
+    models: ['gemma3n:e4b'],
+  })
+  const local = models.filter((m) => m.local)
+  assert.equal(local.length, 1)
+  assert.equal(local[0].provider, 'ollama')
+})
+
+test('switching to a local model warns that it is not Sasha and can change files', async () => {
+  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits', {
+    ready: true,
+    opencodePath: '/bin/true',
+    ollamaUrl: 'http://127.0.0.1:11434',
+    models: ['gemma3n:e4b'],
+  })
+  const events = []
+  manager.onEvent((e) => events.push(e))
+  await manager.select('ollama:gemma3n:e4b', [
+    { id: 'ollama:gemma3n:e4b', label: 'gemma3n (local)', provider: 'ollama', detail: '', local: true },
+  ])
+  const status = events.find((e) => e.kind === 'status')
+  assert.ok(status, 'the difference must be stated at the moment of switching')
+  assert.match(status.text, /not Sasha/i)
+  assert.match(status.text, /change files/i)
+  manager.close()
 })
 
 

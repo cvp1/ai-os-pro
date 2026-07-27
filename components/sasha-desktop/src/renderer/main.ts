@@ -56,6 +56,14 @@ interface Skill {
   command?: string
 }
 
+interface LocalState {
+  ready: boolean
+  opencodePath?: string
+  ollamaUrl: string
+  models: string[]
+  problem?: string
+}
+
 type Direction = 'stays' | 'leaves' | 'unknown'
 interface Flow { what: string; direction: Direction; detail: string }
 interface DataPath { summary: string; flows: Flow[]; workspace?: string }
@@ -89,6 +97,8 @@ interface SashaApi {
   refreshModels(): Promise<ModelChoice[]>
   send(text: string): Promise<boolean>
   interrupt(): Promise<boolean>
+  getLocal(): Promise<LocalState>
+  refreshLocal(): Promise<LocalState>
   getKnowledge(): Promise<Knowledge>
   readDoc(id: string): Promise<string | null>
   getSkills(): Promise<Skill[]>
@@ -98,6 +108,7 @@ interface SashaApi {
   onFocusItem(cb: (id: string) => void): void
   onSession(cb: (event: SessionEvent) => void): void
   onModels(cb: (payload: { models: ModelChoice[]; selected: string | null }) => void): void
+  onLocal(cb: (local: LocalState) => void): void
 }
 
 declare global {
@@ -401,6 +412,15 @@ stopButton.addEventListener('click', () => {
 // Models
 // ---------------------------------------------------------------------------
 
+/**
+ * Why the local group is empty, if it is.
+ *
+ * An absent option teaches nobody anything. The whole promise of this product is that
+ * you can run it on your own weights, so when you cannot, the window owes you the
+ * reason and the fix — not a shorter dropdown.
+ */
+let localState: LocalState | null = null
+
 function renderModels(models: ModelChoice[], selected: string | null): void {
   clear(modelSelect)
 
@@ -410,14 +430,15 @@ function renderModels(models: ModelChoice[], selected: string | null): void {
     modelSelect.appendChild(option)
     modelSelect.disabled = true
     hintEl.textContent =
-      'No model is available: Claude Code was not found, and Ollama is not running on this machine.'
+      'No model is available: Claude Code was not found, and no local model could be reached. ' +
+      (localState?.problem ?? '')
     return
   }
 
   modelSelect.disabled = false
   const groups: { label: string; items: ModelChoice[] }[] = [
     { label: 'Claude — your Claude Code login', items: models.filter((m) => m.provider === 'claude') },
-    { label: 'Local — never leaves this machine', items: models.filter((m) => m.provider === 'ollama') },
+    { label: 'Local — your own machine, your own weights', items: models.filter((m) => m.provider === 'ollama') },
   ]
 
   for (const group of groups) {
@@ -434,18 +455,43 @@ function renderModels(models: ModelChoice[], selected: string | null): void {
     modelSelect.appendChild(optgroup)
   }
 
+  // The dropdown cannot hold an explanation, so an unavailable local half gets a
+  // disabled row that names the reason and a panel line with the fix.
+  if (models.every((model) => !model.local) && localState && !localState.ready) {
+    const optgroup = document.createElement('optgroup')
+    optgroup.label = 'Local — not available yet'
+    const option = el('option', undefined, 'Why? See below')
+    option.value = ''
+    option.disabled = true
+    optgroup.appendChild(option)
+    modelSelect.appendChild(optgroup)
+  }
+
   updateHint(models, selected)
 }
 
 function updateHint(models: ModelChoice[], selected: string | null): void {
   const model = models.find((m) => m.id === selected)
   if (!model) {
-    hintEl.textContent = ''
+    // Nothing selected: the useful thing to say is why local is missing, if it is.
+    hintEl.textContent = localState && !localState.ready ? (localState.problem ?? '') : ''
     return
   }
-  hintEl.textContent = model.local
-    ? `${model.label} runs entirely on this machine — but it is a plain chat: no tools, no access to your files, no skills or memory. Slash commands need a Claude model.`
-    : `${model.label} · ${model.detail}`
+  if (model.local) {
+    // Everything true about a local session, in one line, including the parts that
+    // are not flattering. A user who picks this deserves to know it is a different,
+    // smaller thing than Sasha — before they judge Sasha by it.
+    hintEl.textContent =
+      `${model.label} runs on your own hardware through opencode. It has no skills, ` +
+      'no memory and no AI-OS instructions, so it is not Sasha — and it can read AND ' +
+      'change files in your workspace with less asking than a Claude session. Small ' +
+      'models are wrong more often; check anything that matters.'
+    return
+  }
+  hintEl.textContent = `${model.label} · ${model.detail}`
+  if (localState && !localState.ready && localState.problem) {
+    hintEl.textContent += ` · Local models: ${localState.problem}`
+  }
 }
 
 modelSelect.addEventListener('change', () => {
@@ -756,25 +802,39 @@ sasha.onSession((event) => {
         setBusy(false)
       }
       break
-    case 'ready':
     case 'status':
+      // These used to be dropped on the floor, which silently broke the two most
+      // important things a status carries: the "this is not Sasha, and it can change
+      // files" warning when you switch to a local model, and the "answers arrive all
+      // at once, this may take a minute" note that is the only thing standing between
+      // a slow local turn and a window that looks frozen. Emitting a message nobody
+      // renders is the same as not writing it.
+      addNotice(event.text, 'system')
+      break
+    case 'ready':
       break
   }
 })
 
 sasha.onModels((payload) => renderModels(payload.models, payload.selected))
+sasha.onLocal((state) => {
+  localState = state
+  void sasha.getModels().then((models) => renderModels(models, modelSelect.value || null))
+})
 sasha.onItems((items) => renderBell(items))
 // A notification click means "show me that one" — land on the card, not the chat.
 sasha.onFocusItem(() => showView('waiting'))
 
 async function boot(): Promise<void> {
-  const [install, harness, items, models, selected] = await Promise.all([
+  const [install, harness, items, models, selected, local] = await Promise.all([
     sasha.getInstall(),
     sasha.getHarness(),
     sasha.getItems(),
     sasha.getModels(),
     sasha.getModel(),
+    sasha.getLocal(),
   ])
+  localState = local
   renderStatus(install, harness)
   renderBell(items)
   renderModels(models, selected)

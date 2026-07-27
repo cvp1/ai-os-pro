@@ -19,6 +19,7 @@ import { runDoctor } from './aios/doctor.js'
 import { readKnowledge, readDoc } from './aios/knowledge.js'
 import { discoverSkills } from './aios/skills.js'
 import { describeDataPath } from './aios/datapath.js'
+import { discoverLocal, type LocalState } from './aios/local.js'
 import { SessionManager } from './session/manager.js'
 import { availableModels, defaultModel } from './session/models.js'
 import type { ModelChoice } from './session/protocol.js'
@@ -66,6 +67,7 @@ let state: DeskState = { dismissed: {}, notified: {}, settings: { ...DEFAULT_SET
 let items: BellItem[] = []
 let chat: SessionManager | null = null
 let models: ModelChoice[] = []
+let local: LocalState = { ready: false, ollamaUrl: '', models: [] }
 
 function deskStatePath(): string {
   return statePath(app.getPath('userData'))
@@ -492,10 +494,22 @@ function registerIpc(): void {
       modelLabel: selected?.label ?? null,
       provider: selected?.provider ?? null,
       local: selected?.local ?? false,
-      harnessFound: harness.found,
+      harnessFound: harness.found || local.ready,
       harnessPath: harness.path,
       installRoot: install.root,
+      ollamaUrl: selected?.local ? local.ollamaUrl : undefined,
     })
+  })
+
+  /** Why local models are or are not on the menu — shown next to the picker. */
+  ipcMain.handle('desk:get-local', () => local)
+
+  ipcMain.handle('desk:refresh-local', async () => {
+    local = await discoverLocal()
+    chat?.setLocal(local)
+    models = availableModels(findHarness().found, local)
+    mainWindow?.webContents.send('desk:models', { models, selected: chat?.modelId ?? null })
+    return local
   })
 
   // --- the conversation -----------------------------------------------------
@@ -523,7 +537,9 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('desk:refresh-models', async () => {
-    models = await availableModels(findHarness().found)
+    local = await discoverLocal()
+    chat?.setLocal(local)
+    models = availableModels(findHarness().found, local)
     return models
   })
 
@@ -586,11 +602,21 @@ if (!app.requestSingleInstanceLock()) {
     )
     chat.onEvent((event) => mainWindow?.webContents.send('desk:session', event))
 
-    void availableModels(harness.found).then((choices) => {
-      models = choices
-      const chosen = defaultModel(choices, state.settings.lastModel)
-      if (chosen) void chat?.select(chosen, choices)
+    // Claude models are known synchronously, so the picker is usable immediately;
+    // the local probe spawns processes and lands a moment later. Never block the
+    // window on it — a slow `ollama list` must not delay the product opening.
+    models = availableModels(harness.found, local)
+    const first = defaultModel(models, state.settings.lastModel)
+    if (first) void chat.select(first, models)
+
+    void discoverLocal().then((state_) => {
+      local = state_
+      chat?.setLocal(local)
+      models = availableModels(harness.found, local)
+      const chosen = chat?.modelId ?? defaultModel(models, state.settings.lastModel)
+      if (chosen && !chat?.modelId) void chat?.select(chosen, models)
       mainWindow?.webContents.send('desk:models', { models, selected: chosen })
+      mainWindow?.webContents.send('desk:local', local)
     })
 
     registerIpc()

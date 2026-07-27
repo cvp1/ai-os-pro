@@ -50,6 +50,14 @@ export interface DataPathInputs {
   harnessFound: boolean
   harnessPath?: string
   installRoot?: string
+  /** Set when the selected model is local — where that Ollama actually lives. */
+  ollamaUrl?: string
+}
+
+/** Loopback means "this machine"; a LAN address means "a machine you own". */
+function isLoopback(url: string | undefined): boolean {
+  if (!url) return true
+  return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|$|\/)/i.test(url)
 }
 
 export function describeDataPath(inputs: DataPathInputs): DataPath {
@@ -64,13 +72,27 @@ export function describeDataPath(inputs: DataPathInputs): DataPath {
         'Nothing is running yet — Claude Code was not found on this machine, so there ' +
         'is no session to send anything anywhere.',
     })
-  } else if (inputs.local) {
+  } else if (inputs.local && isLoopback(inputs.ollamaUrl)) {
     flows.push({
       what: 'Your conversation',
       direction: 'stays',
       detail:
-        `${inputs.modelLabel ?? 'The selected model'} runs on hardware you control. ` +
-        'What you type is answered locally and is not sent to any company.',
+        `${inputs.modelLabel ?? 'The selected model'} runs on this computer. What you ` +
+        'type is answered here and is not sent to any company — no internet ' +
+        'connection is needed for it at all.',
+    })
+  } else if (inputs.local) {
+    // A local model on ANOTHER box is still private, but "stays on this machine" would
+    // be false — and the whole panel is worthless the first time it says something
+    // false. It goes over your network; say that, and say where.
+    flows.push({
+      what: 'Your conversation',
+      direction: 'leaves',
+      detail:
+        `${inputs.modelLabel ?? 'The selected model'} runs on a different machine on ` +
+        `your own network (${inputs.ollamaUrl}), so what you type travels there over ` +
+        'your network. It still reaches no company and no internet service — but it ' +
+        'does leave this computer.',
     })
   } else {
     flows.push({
@@ -102,10 +124,13 @@ export function describeDataPath(inputs: DataPathInputs): DataPath {
       detail:
         `Sasha works inside ${inputs.installRoot} and can read and change files there ` +
         'when you ask it to. ' +
-        (inputs.local || !inputs.harnessFound
-          ? 'Nothing is uploaded.'
-          : 'Anything it reads in order to answer you becomes part of what is sent to ' +
-            'the model — that is how it can answer questions about your own notes.'),
+        (inputs.local
+          ? 'A local model asks less before changing a file than a Claude session ' +
+            'does, so be specific with it. Nothing is uploaded to any company.'
+          : !inputs.harnessFound
+            ? 'Nothing is uploaded.'
+            : 'Anything it reads in order to answer you becomes part of what is sent to ' +
+              'the model — that is how it can answer questions about your own notes.'),
     })
   }
 
@@ -121,9 +146,11 @@ export function describeDataPath(inputs: DataPathInputs): DataPath {
   const leaving = flows.some((flow) => flow.direction === 'leaves')
   const summary = !inputs.harnessFound
     ? 'Nothing is leaving this machine — nothing is running yet.'
-    : leaving
-      ? 'Your conversation goes to the model you picked. Nothing else leaves this machine.'
-      : 'Nothing leaves this machine.'
+    : !leaving
+      ? 'Nothing leaves this machine.'
+      : inputs.local
+        ? 'Your conversation goes to your own machine on your own network. Nothing reaches the internet.'
+        : 'Your conversation goes to the model you picked. Nothing else leaves this machine.'
 
   const path: DataPath = { summary, flows }
   if (inputs.installRoot) path.workspace = inputs.installRoot

@@ -35,17 +35,42 @@ the capability keeps working with no GUI, no harness, and no us.
 plainly what leaves this machine and what does not. When you are talking to a cloud
 model it says so first, in those words, above the reassuring rows.
 
-**Local models: not here — and here is the honest record.** For two days this app
-carried an Anthropic→Ollama bridge so Claude Code could drive a local model with
-its full system prompt, tools, skills and memory. It worked mechanically (eleven
-multi-turn tool round-trips in live trials, one trial 4/4 on a real agentic task).
-It then FAILED its pre-stated reliability gate — 1/2 task completion on live
-hardware where the bar, set before the run, was 2/2 — and was deleted per that
-falsifier rather than patched until green or shipped flaky. The record and the
-revival conditions live in `src/main/session/manager.ts`; the code lives in git
-history. For a local agent today, use [opencode](https://opencode.ai) with your
-Ollama models — it is gate-passed for exactly that job. Selecting a local model
-here tells you this instead of half-working.
+**You can run it on your own weights.** Local models sit in the same picker as the
+Claude ones — whatever your Ollama holds — and they get real tools, so a local
+session can read and search your actual files rather than being a toy chat box.
+
+That took two attempts, and the first one's failure is worth reading. v0.3 shipped an
+Anthropic→Ollama bridge of our own so Claude Code could drive local weights with its
+full prompt stack; it FAILED its pre-stated gate (1/2 task completion where the bar,
+set before the run, was 2/2) and was deleted per that falsifier rather than patched
+until green. The control run afterwards is what changed the conclusion: a native
+[opencode](https://opencode.ai) arm scored **the same 1/2** on the same task and
+model, at roughly half the wall time. The limit was the model tier, not the transport
+— the bridge was just the expensive way to reach it. So local models run through
+opencode, spawned like any other binary, and the bridge stays deleted.
+
+Three things are true about a local session, and the app says all three rather than
+only the flattering one:
+
+- **It is not Sasha.** No skills, no memory, no AI-OS instructions — opencode reads
+  its own context files, not Claude Code's. It is a capable agent on your machine,
+  which is a different product from your personal AI.
+- **It can change files, with less asking than a Claude session.** A read-only
+  posture was attempted four ways (permission-deny, two agent configs, the built-in
+  `plan` agent) and *every one hung the binary* — measured, with timings recorded in
+  `src/main/session/opencode-backend.ts`. Shipping the configuration that works and
+  disclosing what it means beat shipping a window that freezes. Tightening it is open
+  follow-on work, and those four dead ends are written down so the next attempt starts
+  from evidence.
+- **It is slower and wronger.** Answers arrive all at once rather than word by word
+  (`opencode run --format json` buffers until exit — measured, not assumed), so a
+  turn can be a minute or more of silence; the app says so while you wait. And a
+  4B-class model completes roughly half of five-step agentic tasks on this fleet.
+
+Needs Ollama plus opencode. Missing either one is explained in the picker with the
+one thing to install, never a silently shorter menu. A remote Ollama works via
+`SASHA_OLLAMA_URL` (+ `SASHA_OLLAMA_MODELS`, since enumerating a remote host needs
+the CLI that is not there).
 
 ## What it is not
 
