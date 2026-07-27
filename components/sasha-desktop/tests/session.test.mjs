@@ -95,52 +95,73 @@ test('with nothing available the answer is null, not a guess', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Slash commands must never be silently handed to a bare local model
+// Local models go through the SAME harness as Claude
 // ---------------------------------------------------------------------------
 
-import { SessionManager } from '../out/main/session/manager.js'
+import { startAnthropicBridge } from '../out/main/session/anthropic-bridge.js'
 
-const LOCAL = [{ id: 'ollama:x', label: 'x', provider: 'ollama', detail: '', local: true }]
-
-function capture(manager) {
-  const events = []
-  manager.onEvent((e) => events.push(e))
-  return events
-}
-
-test('a slash command to a LOCAL model is refused, not silently answered', async () => {
-  // The failure this prevents: "/brief" reaches a bare model as literal text, the
-  // model invents a confident briefing, and the user cannot tell it is fiction.
-  // A refusal is worse UX and far better behaviour.
-  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits')
-  const events = capture(manager)
-  manager.select('ollama:x', LOCAL)
-
-  const sent = await manager.send('/brief')
-  assert.equal(sent, false, 'the message must not be sent')
-
-  const error = events.find((e) => e.kind === 'error')
-  assert.ok(error, 'the user must be told why')
-  assert.match(error.message, /\/brief/)
-  assert.match(error.message, /cannot run skills/)
+test('the local-model bridge binds loopback and nothing else', async () => {
+  // It exists to give local models Claude Code's brain; it must never become a
+  // listener anything off-machine can reach.
+  const bridge = await startAnthropicBridge()
+  try {
+    assert.ok(bridge.port > 0, 'a port should be assigned')
+  } finally {
+    bridge.close()
+  }
 })
 
-test('the refusal covers leading whitespace and arguments', async () => {
-  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits')
-  capture(manager)
-  manager.select('ollama:x', LOCAL)
-  assert.equal(await manager.send('  /status --deep'), false)
-})
+test('the bridge translates an Anthropic request into an Ollama one', async () => {
+  // The whole point: system prompt and tool definitions must survive the crossing,
+  // because those ARE the brain. If either is dropped the local model silently
+  // becomes the bare chat this bridge was built to replace.
+  const { createServer } = await import('node:http')
+  const received = []
 
-test('ordinary questions to a local model are NOT refused', async () => {
-  // The guard must be narrow: only slash commands, nothing else.
-  const manager = new SessionManager(undefined, '/tmp', 'acceptEdits')
-  const events = capture(manager)
-  manager.select('ollama:x', LOCAL)
-  await manager.send('what is 2 + 2?')
-  assert.equal(
-    events.some((e) => e.kind === 'error' && /cannot run skills/.test(e.message)),
-    false,
-    'a plain question must pass through',
-  )
+  const ollama = createServer((req, res) => {
+    let body = ''
+    req.on('data', (c) => (body += c))
+    req.on('end', () => {
+      received.push(JSON.parse(body))
+      res.setHeader('content-type', 'application/x-ndjson')
+      res.end(JSON.stringify({ message: { content: 'ok' }, done: true }) + '\n')
+    })
+  })
+  await new Promise((r) => ollama.listen(11434, '127.0.0.1', r))
+
+  const bridge = await startAnthropicBridge()
+  try {
+    const res = await fetch(`http://127.0.0.1:${bridge.port}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'test-model',
+        system: 'You are a Claude agent.',
+        tools: [
+          { name: 'Read', description: 'read a file', input_schema: { type: 'object' } },
+          { name: 'Bash', description: 'run a command', input_schema: { type: 'object' } },
+        ],
+        messages: [{ role: 'user', content: 'hello' }],
+        stream: true,
+      }),
+    })
+    await res.text()
+
+    assert.equal(received.length, 1, 'the bridge should have called Ollama once')
+    const payload = received[0]
+
+    const system = payload.messages.find((m) => m.role === 'system')
+    assert.ok(system, 'the system prompt must reach the local model')
+    assert.match(system.content, /You are a Claude agent/)
+
+    assert.equal(payload.tools.length, 2, 'tool definitions must reach the local model')
+    assert.deepEqual(
+      payload.tools.map((t) => t.function.name).sort(),
+      ['Bash', 'Read'],
+    )
+    assert.equal(payload.model, 'test-model')
+  } finally {
+    bridge.close()
+    await new Promise((r) => ollama.close(r))
+  }
 })

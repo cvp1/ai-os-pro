@@ -469,7 +469,7 @@ function registerIpc(): void {
   ipcMain.handle('desk:select-model', (_event, modelId: unknown) => {
     if (typeof modelId !== 'string' || !chat) return false
     if (!models.some((choice) => choice.id === modelId)) return false
-    chat.select(modelId, models)
+    void chat.select(modelId, models)
     state.settings.lastModel = modelId
     persist()
     return true
@@ -552,7 +552,7 @@ if (!app.requestSingleInstanceLock()) {
     void availableModels(harness.found).then((choices) => {
       models = choices
       const chosen = defaultModel(choices, state.settings.lastModel)
-      if (chosen) chat?.select(chosen, choices)
+      if (chosen) void chat?.select(chosen, choices)
       mainWindow?.webContents.send('desk:models', { models, selected: chosen })
     })
 

@@ -41,10 +41,10 @@ export async function availableModels(harnessFound: boolean): Promise<ModelChoic
       id: `ollama:${name}`,
       label: name,
       provider: 'ollama',
-      // Say the limitation in the same breath as the benefit. A local model here is a
-      // bare chat: no tools, no files, no skills, no memory. Selling it as "Sasha, but
-      // local" would be the kind of overclaim this project exists not to make.
-      detail: 'Runs on this machine — plain chat only: no tools, files, skills or memory',
+      // Local models now run through Claude Code via the loopback bridge, so they get
+      // the same system prompt, tools, skills and memory. What differs is the weights
+      // — and how well a smaller model actually USES a large tool surface.
+      detail: 'Runs on this machine — same tools and skills, nothing leaves the box',
       local: true,
     })
   }

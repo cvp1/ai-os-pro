@@ -32,6 +32,12 @@ export class ClaudeBackend implements Backend {
     private readonly model: string,
     private readonly permissionMode: string,
     label: string,
+    /**
+     * Extra environment for the child. This is how a LOCAL model gets a brain:
+     * point ANTHROPIC_BASE_URL at the loopback bridge and Claude Code drives the
+     * local model with its own system prompt, tools, skills and memory.
+     */
+    private readonly extraEnv: Record<string, string> = {},
   ) {
     this.label = label
   }
@@ -61,7 +67,11 @@ export class ClaudeBackend implements Backend {
       this.permissionMode,
     ]
 
-    const child = spawn(this.binary, args, { cwd: this.cwd, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(this.binary, args, {
+      cwd: this.cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, ...this.extraEnv },
+    })
     this.child = child
 
     child.stdout.on('data', (chunk: Buffer) => this.consume(chunk.toString('utf8')))

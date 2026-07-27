@@ -21,28 +21,31 @@ has pulled, running entirely on your own machine. That choice is structural, not
 cosmetic: the app speaks a neutral protocol and each provider is an adapter behind
 it, so adding one is a new file rather than a new UI.
 
-**The two are not equal, and the app says so.** Only the Claude path is *Sasha* —
-your workspace, skills, memory and tools. A local model here is a **plain chat**: no
-tools, no access to your files, no skills, no memory. That is a real limitation of
-running a bare model server, not a temporary gap we are glossing over.
+**Both run through the same brain.** This is the part that took a rebuild to get
+right. Claude is intelligent here because Claude Code *is* the intelligence — it
+assembles the system prompt, owns the tools, loads your skills and memory, enforces
+permissions, runs the agent loop. v0.2 talked to Ollama's `/api/chat` directly, which
+is a bare completion endpoint, so a local model got none of that. It had no brain
+because the brain was never written.
+
+Rather than re-implement Claude Code badly, Sasha Desktop now starts a **loopback
+bridge** that speaks the Anthropic Messages API and points Claude Code at it with
+`ANTHROPIC_BASE_URL`. So a local model receives the same system prompt, the same
+tools, the same skills, the same memory — the entire harness. The only difference is
+which weights answer.
 
 | | Claude Code | Ollama (local) |
 |---|---|---|
-| Your files and tools | yes | **no** |
-| Skills / slash commands | yes | **no** |
-| Memory, `CLAUDE.md`, `me/` | yes | **no** |
+| Your files and tools | yes | yes |
+| Skills / slash commands | yes | yes |
+| Memory, `CLAUDE.md`, `me/` | yes | yes |
 | Leaves your machine | to Anthropic, as your terminal does | **never** |
 | Cost | metered, shown per turn | none |
 
-Typing `/brief` at a local model would otherwise send the literal text `/brief` to a
-model with no such concept, and it would invent a plausible answer. The app refuses
-that instead and tells you to switch — a wrong answer that looks right is worse than
-no answer.
-
-**It tells you when something is waiting.** The doorbell from v0.1 is still here,
-demoted to where it belongs — a drawer in the header. When a manager stages a draft
-while you were away, or a scheduled job goes quietly dead, it rings once and shows
-you a card. One item, silence when there is nothing, quiet hours 9pm–5am.
+**The honest caveat:** giving a small model a large tool surface is not the same as
+it using that surface well. The harness is now identical; whether a 4B local model
+holds a multi-step tool loop together is a question about the *model*, and you should
+expect to find out by trying rather than by reading this table.
 
 ## What it is not
 
